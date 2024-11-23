@@ -1,0 +1,9 @@
+{
+  "rust-analyzer.linkedProjects": [ "Cargo.toml" ],
+  "rust-analyzer.check.overrideCommand": [
+    "cargo",
+    "clippy",
+    "--message-format=json",
+    "--workspace",
+  ]
+}

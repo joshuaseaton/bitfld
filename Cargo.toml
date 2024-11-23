@@ -1,0 +1,52 @@
+# Copyright (c) 2025 Joshua Seaton
+#
+# Use of this source code is governed by a MIT-style
+# license that can be found in the LICENSE file or at
+# https://opensource.org/licenses/MIT
+
+[workspace]
+members = [ ".", "bitfld-macro" ]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.5"
+edition = "2021"
+
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/joshuaseaton/bitfld"
+
+[workspace.lints.clippy]
+all = {level = "deny", priority = -1 }
+pedantic = {level = "deny", priority = -1 }
+too_many_lines = "allow"
+
+[package]
+name = "bitfld"
+version.workspace = true
+edition.workspace = true
+
+categories = [ "encoding", "no-std" ]
+keywords = [ "bitfield", "bit-field", "layout" ]
+description = "Ergonomic, no-std specification of bitfield layouts"
+
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+bitfld-macro = { path = "bitfld-macro" }
+
+[dev-dependencies]
+zerocopy = { version = "0.8", features = [ "derive" ] }
+
+[[example]]
+name = "basic"
+path = "examples/basic.rs"
+
+[[example]]
+name = "bitfield-repr"
+path = "examples/bitfield-repr.rs"
