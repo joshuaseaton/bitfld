@@ -895,6 +895,9 @@ impl ToTokens for Bitfields {
             }
 
             impl ::core::convert::From<#base> for #type_name {
+                // `RSVD{0,1}_MASK` may be zero, in which case the following
+                // mask conditions might be trivially true.
+                #[allow(clippy::bad_bit_mask)]
                 fn from(value: #base) -> Self {
                     debug_assert!(
                         value & Self::RSVD1_MASK == Self::RSVD1_MASK,
