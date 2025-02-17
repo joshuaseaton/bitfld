@@ -383,10 +383,12 @@ use core::fmt;
 /// in this context, it can sometimes be convenient to have these raw masks and
 /// shifts on hand. One example is when building up a register value in inline
 /// assembly. Accordingly, the layout type will have the associated constants of
-/// `FOO_MASK: $base` and `FOO_SHIFT: usize` for each named field `foo`.
-/// Further, `RSVD1_MASK: $base` and `RSVD0_MASK: $base` are defined, giving the
-/// mask of reserved-as bits that should be set or unset, as well as
-/// `DEFAULT: $base` giving the default layout value.
+/// `FOO_MASK: $base` and `FOO_SHIFT: usize` for each named field `foo` of
+/// width > 1; for a width-1 field named `foo` only a `FOO_BIT: usize` constant
+/// will be defined, representing the shift. Further, `RSVD1_MASK: $base` and
+/// `RSVD0_MASK: $base` are defined, giving the mask of reserved-as bits that
+/// should be set or unset, as well as `DEFAULT: $base` giving the default
+/// layout value.
 ///
 /// ## Iteration
 ///
