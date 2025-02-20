@@ -8,13 +8,12 @@ use std::str::FromStr;
 
 use proc_macro::TokenStream;
 use proc_macro2::{Literal, Span, TokenStream as TokenStream2};
-use quote::{format_ident, quote, ToTokens};
+use quote::{ToTokens, format_ident, quote};
 use syn::parse::{Error, Parse, ParseStream, Result};
 use syn::spanned::Spanned;
 use syn::{
-    braced, parse_macro_input, parse_quote, Expr, ExprLit, Fields,
-    GenericArgument, Ident, ItemStruct, Lit, Pat, Path, PathArguments, Stmt,
-    Type,
+    Expr, ExprLit, Fields, GenericArgument, Ident, ItemStruct, Lit, Pat, Path,
+    PathArguments, Stmt, Type, braced, parse_macro_input, parse_quote,
 };
 
 #[proc_macro_attribute]
@@ -144,7 +143,7 @@ impl Parse for TypeDef {
         }
 
         //
-        let base_type = if let Fields::Unnamed(ref fields) = &strct.fields {
+        let base_type = if let Fields::Unnamed(fields) = &strct.fields {
             if fields.unnamed.is_empty() {
                 return Err(Error::new_spanned(
                     &fields.unnamed,
@@ -362,8 +361,7 @@ impl Bitfield {
 
 impl Parse for Bitfield {
     fn parse(input: ParseStream) -> Result<Self> {
-        const INVALID_BITFIELD_DECL_FORM: &str =
-            "bitfield declaration should take one of the following forms:\n\
+        const INVALID_BITFIELD_DECL_FORM: &str = "bitfield declaration should take one of the following forms:\n\
             * `let $name: Bit<$bit> (= $default)?;`\n\
             * `let $name: Bits<$high, $low (, $repr)?> (= $default)?;`\n\
             * `let _: Bit<$bit> (= $value)?;`\n\
@@ -408,12 +406,11 @@ impl Parse for Bitfield {
 
         let get_bits_and_repr = |bits: &mut [usize]| -> Result<Option<Type>> {
             let args = &path.segments.first().unwrap().arguments;
-            let args =
-                if let PathArguments::AngleBracketed(ref bracketed) = args {
-                    &bracketed.args
-                } else {
-                    return Err(err(&args));
-                };
+            let args = if let PathArguments::AngleBracketed(bracketed) = args {
+                &bracketed.args
+            } else {
+                return Err(err(&args));
+            };
             if args.len() < bits.len() || args.len() > bits.len() + 1 {
                 return Err(err(&args));
             }
