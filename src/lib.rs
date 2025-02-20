@@ -33,7 +33,7 @@
 //!     * [`Debug`], [`Display`][`core::fmt::Display`],
 //!       [`Binary`][`core::fmt::Binary`], [`LowerHex`][`core::fmt::LowerHex`],
 //!       [`UpperHex`][`core::fmt::UpperHex`], [`Octal`][`core::fmt::Octal`]
-//! * Specification of default and "reserved as" values, with `new()` respecting
+//! * Specification of default and "reserved-as" values, with `new()` respecting
 //!   reserved-as values and `default()` respecting both;
 //! * Custom bitfield representation types without any boilerplate;
 //! * Iteration over individual bitfield values and metadata;
@@ -315,7 +315,7 @@ use core::fmt;
 /// ```
 ///
 /// Otherwise, a named field `foo` that does not specify a
-/// [custom represention][#fields-with-custom-representation] (given by `$repr`
+/// [custom represention][#fields-with-custom-representations] (given by `$repr`
 /// above) yields a getter and setter over its range
 ///
 /// ```ignore
