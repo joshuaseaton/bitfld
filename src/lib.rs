@@ -29,7 +29,7 @@
 //!     * [`Default`]
 //!     * [`From`] over the base type
 //!     * [`Deref`][`core::ops::Deref`] and [`DerefMut`][`core::ops::DerefMut`],
-//!        with a target of the underlying base type
+//!       with a target of the underlying base type
 //!     * [`Debug`], [`Display`][`core::fmt::Display`],
 //!       [`Binary`][`core::fmt::Binary`], [`LowerHex`][`core::fmt::LowerHex`],
 //!       [`UpperHex`][`core::fmt::UpperHex`], [`Octal`][`core::fmt::Octal`]

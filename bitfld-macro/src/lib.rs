@@ -135,7 +135,6 @@ impl Parse for TypeDef {
 
             if attr.path().is_ident("repr") {
                 repr = true;
-                continue;
             }
         }
         if !repr {
@@ -424,7 +423,7 @@ impl Parse for Bitfield {
                         *bit = b.base10_parse()?;
                     }
                     _ => return Err(err(&arg)),
-                };
+                }
             }
             if args.len() == bits.len() + 1 {
                 let arg = args.last().unwrap();
