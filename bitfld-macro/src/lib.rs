@@ -204,7 +204,7 @@ impl Bitfield {
             // If the first hex digit is not 'f', write that out now. After that,
             // the remaining width will be a multiple of four, and the remaining
             // digits will be either f or 0.
-            if num_ones % 4 != 0 {
+            if !num_ones.is_multiple_of(4) {
                 mask_str.push(match num_ones % 4 {
                     1 => '1',
                     2 => '3',
@@ -215,7 +215,7 @@ impl Bitfield {
 
             let mut remaining = num_ones / 4;
             while remaining > 0 {
-                if mask_str.len() > 2 && remaining % 4 == 0 {
+                if mask_str.len() > 2 && remaining.is_multiple_of(4) {
                     mask_str.push('_');
                 }
                 mask_str.push('f');
