@@ -629,7 +629,7 @@ impl Bitfields {
         quote! {
             #layout_metadata_impl
 
-            #[allow(dead_code)]
+            #[doc(hidden)]
             #vis struct #iter_type(#base, usize);
 
             impl ::core::iter::Iterator for #iter_type {
@@ -648,23 +648,23 @@ impl Bitfields {
             }
 
             impl #ty {
-                pub fn iter(&self) -> #iter_type {
+                pub fn iter(&self) -> impl ::core::iter::Iterator<Item = (#base, &'static ::bitfld::FieldMetadata<#base>)> {
                     #iter_type(self.0, 0)
                 }
             }
 
             impl ::core::iter::IntoIterator for #ty {
-                type Item = <#iter_type as ::core::iter::Iterator>::Item;
+                type Item = (#base, &'static ::bitfld::FieldMetadata<#base>);
                 type IntoIter = #iter_type;
 
-                fn into_iter(self) -> Self::IntoIter { self.iter() }
+                fn into_iter(self) -> Self::IntoIter { #iter_type(self.0, 0) }
             }
 
             impl<'a> ::core::iter::IntoIterator for &'a #ty {
-                type Item = <#iter_type as ::core::iter::Iterator>::Item;
+                type Item = (#base, &'static ::bitfld::FieldMetadata<#base>);
                 type IntoIter = #iter_type;
 
-                fn into_iter(self) -> Self::IntoIter { self.iter() }
+                fn into_iter(self) -> Self::IntoIter { #iter_type(self.0, 0) }
             }
         }
     }
