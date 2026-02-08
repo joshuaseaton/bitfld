@@ -501,23 +501,24 @@ impl Bitfields {
         let base = &self.ty.base.def;
 
         let mut field_constants = Vec::new();
+        let mut field_metadata = Vec::new();
         let mut checks = Vec::new();
         let mut default_values = vec![quote! {Self::RSVD1_MASK}];
 
         for field in &self.named {
-            let field_name =
-                field.name.as_ref().unwrap().to_string().to_uppercase();
+            let name_lower = field.name.as_ref().unwrap().to_string();
+            let name_upper = name_lower.clone().to_uppercase();
             let low_bit = Literal::usize_unsuffixed(field.low_bit);
             let shifted_mask = &field.shifted_mask;
 
             if field.bit_width() == 1 {
-                let bit_name = format_ident!("{field_name}_BIT");
+                let bit_name = format_ident!("{name_upper}_BIT");
                 field_constants.push(quote! {
                     pub const #bit_name: usize = #low_bit;
                 });
             } else {
-                let mask_name = format_ident!("{field_name}_MASK");
-                let shift_name = format_ident!("{field_name}_SHIFT");
+                let mask_name = format_ident!("{name_upper}_MASK");
+                let shift_name = format_ident!("{name_upper}_SHIFT");
                 field_constants.push(quote! {
                     pub const #mask_name: #base = #shifted_mask;
                     pub const #shift_name: usize = #low_bit;
@@ -525,7 +526,7 @@ impl Bitfields {
             }
 
             if let Some(default) = &field.default {
-                let default_name = format_ident!("{field_name}_DEFAULT");
+                let default_name = format_ident!("{name_upper}_DEFAULT");
                 field_constants.push(quote! {
                     pub const #default_name: #base = ((#default) as #base) << #low_bit;
                 });
@@ -534,6 +535,21 @@ impl Bitfields {
                 });
                 default_values.push(quote! { Self::#default_name });
             }
+
+            let high_bit = Literal::usize_unsuffixed(field.high_bit);
+            let default = if let Some(default) = &field.default {
+                quote! { #default }
+            } else {
+                quote! { 0 }
+            };
+            field_metadata.push(quote! {
+                ::bitfld::FieldMetadata::<#base>{
+                    name: #name_lower,
+                    high_bit: #high_bit,
+                    low_bit: #low_bit,
+                    default: #default as #base,
+                },
+            });
         }
 
         let mut rsvd1_values = Vec::new();
@@ -555,6 +571,16 @@ impl Bitfields {
                 (!Self::#name & (#shifted_mask << #low_bit))
             });
         }
+
+        let num_fields = Literal::usize_unsuffixed(self.named.len());
+        let field_metadata = field_metadata.into_iter();
+        field_constants.push(
+            quote! {
+                pub const FIELDS: [::bitfld::FieldMetadata::<#base>; #num_fields] = [
+                    #(#field_metadata)*
+                ];
+            }
+        );
 
         let field_constants = field_constants.into_iter();
 
@@ -592,43 +618,11 @@ impl Bitfields {
     fn iter_impl(&self) -> TokenStream2 {
         let ty = &self.ty.def.ident;
         let base = &self.ty.base.def;
-        let num_fields = Literal::usize_unsuffixed(self.named.len());
-
-        let metadata = self.named.iter().map(|field| {
-            let low_bit = Literal::usize_unsuffixed(field.low_bit);
-            let high_bit = Literal::usize_unsuffixed(field.high_bit);
-            let name = field.name.as_ref().unwrap().to_string();
-            let default = if let Some(default) = &field.default {
-                quote! { #default }
-            } else {
-                quote! { 0 }
-            };
-            quote! {
-                ::bitfld::FieldMetadata::<#base>{
-                    name: #name,
-                    high_bit: #high_bit,
-                    low_bit: #low_bit,
-                    default: #default as #base,
-                },
-            }
-        });
-
-        let layout_metadata_impl = quote! {
-            impl ::bitfld::LayoutMetadata<#num_fields> for #ty {
-                type Base = #base;
-
-                const FIELDS: [::bitfld::FieldMetadata::<#base>; #num_fields] = [
-                    #(#metadata)*
-                ];
-            }
-        };
-
         let iter_type = format_ident!("{}Iter", ty);
         let vis = &self.ty.def.vis;
+        let num_fields = Literal::usize_unsuffixed(self.named.len());
 
         quote! {
-            #layout_metadata_impl
-
             #[doc(hidden)]
             #vis struct #iter_type(#base, usize);
 
@@ -639,7 +633,7 @@ impl Bitfields {
                     if self.1 >= #num_fields {
                         return None;
                     }
-                    let metadata = &<#ty as ::bitfld::LayoutMetadata<#num_fields>>::FIELDS[self.1];
+                    let metadata = &#ty::FIELDS[self.1];
                     let shifted_mask = (1 << (metadata.high_bit - metadata.low_bit + 1)) - 1;
                     let value = (self.0 >> metadata.low_bit) & shifted_mask;
                     self.1 += 1;

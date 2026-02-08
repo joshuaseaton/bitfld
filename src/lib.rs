@@ -456,15 +456,3 @@ pub struct FieldMetadata<Base: Unsigned> {
     pub low_bit: usize,
     pub default: Base,
 }
-
-// Implemented by types defined by `layout!` and aids in the definition of
-// its associated iterator type.
-//
-// TODO(https://github.com/rust-lang/rust/issues/60551): Make NUM_FIELDS an
-// associated constant when possible.
-#[doc(hidden)]
-pub trait LayoutMetadata<const NUM_FIELDS: usize> {
-    type Base: Unsigned;
-
-    const FIELDS: [FieldMetadata<Self::Base>; NUM_FIELDS];
-}
