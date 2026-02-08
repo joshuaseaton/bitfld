@@ -451,8 +451,12 @@ pub struct InvalidBits<Base: Unsigned>(pub Base);
 /// `(Base, &'static FieldMetadata<Base>)`.
 #[derive(Debug)]
 pub struct FieldMetadata<Base: Unsigned> {
+    /// The name of the bitfield.
     pub name: &'static str,
+    /// The high bit of the bitfield.
     pub high_bit: usize,
+    /// The low bit of the bitfield.
     pub low_bit: usize,
+    /// The default value of the bitfield.
     pub default: Base,
 }

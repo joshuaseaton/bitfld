@@ -254,23 +254,34 @@ impl Bitfield {
         }
     }
 
-    fn getter_and_setter(&self, base: &BaseTypeDef) -> TokenStream2 {
+    fn getter_and_setter(&self, ty: &TypeDef) -> TokenStream2 {
         debug_assert!(!self.is_reserved());
 
         let name = self.name.as_ref().unwrap();
         let setter_name = format_ident!("set_{}", name);
 
-        let base_type = &base.def;
+        let base_type = &ty.base.def;
+        let ty = &ty.def.ident;
         let low_bit = Literal::usize_unsuffixed(self.low_bit);
         let bit_width = self.bit_width();
 
         if bit_width == 1 {
+            let get_doc = format!(
+                "Returns the value of the `{name}` bit (i.e., {ty}[{}]).",
+                self.low_bit,
+            );
+            let set_doc = format!(
+                "Sets the value of the `{name}` bit (i.e., {ty}[{}]).",
+                self.low_bit,
+            );
             return quote! {
+                #[doc = #get_doc]
                 #[inline]
                 pub const fn #name(&self) -> bool {
                     (self.0 & (1 << #low_bit)) != 0
                 }
 
+                #[doc = #set_doc]
                 #[inline]
                 pub const fn #setter_name(&mut self, value: bool) -> &mut Self {
                     if value {
@@ -283,12 +294,22 @@ impl Bitfield {
             };
         }
 
+        let get_doc = format!(
+            "Returns the value of the `{name}` field (i.e., `{ty}[{}:{}]`).",
+            self.high_bit, self.low_bit,
+        );
+        let set_doc = format!(
+            "Sets the value of the `{name}` field (i.e., `{ty}[{}:{}]`).",
+            self.high_bit, self.low_bit,
+        );
+
         let min_width = self.minimum_width_integral_type();
         let shifted_mask = &self.shifted_mask;
         let get_value =
             quote! { ((self.0 >> #low_bit) & #shifted_mask) as #min_width };
         let getter = if let Some(repr) = &self.repr {
             quote! {
+                #[doc = #get_doc]
                 #[inline]
                 pub fn #name(&self)
                     -> ::core::result::Result<#repr, ::bitfld::InvalidBits<#min_width>>
@@ -304,6 +325,7 @@ impl Bitfield {
             }
         } else {
             quote! {
+                #[doc = #get_doc]
                 #[inline]
                 pub const fn #name(&self) -> #min_width {
                     #get_value
@@ -326,6 +348,7 @@ impl Bitfield {
 
         let setter = if let Some(repr) = &self.repr {
             quote! {
+                #[doc = #set_doc]
                 #[inline]
                 pub fn #setter_name(&mut self, value: #repr) -> &mut Self
                 where
@@ -341,6 +364,7 @@ impl Bitfield {
             }
         } else {
             quote! {
+                #[doc = #set_doc]
                 #[inline]
                 pub const fn #setter_name(&mut self, value: #min_width) -> &mut Self {
                     #set_value
@@ -513,21 +537,34 @@ impl Bitfields {
 
             if field.bit_width() == 1 {
                 let bit_name = format_ident!("{name_upper}_BIT");
+                let doc = format!("Bit position of the `{name_lower}` field.",);
                 field_constants.push(quote! {
+                    #[doc = #doc]
                     pub const #bit_name: usize = #low_bit;
                 });
             } else {
                 let mask_name = format_ident!("{name_upper}_MASK");
                 let shift_name = format_ident!("{name_upper}_SHIFT");
+                let mask_doc =
+                    format!("Unshifted bitmask of the `{name_lower}` field.");
+                let shift_doc = format!(
+                    "Bit shift (i.e., the low bit) of the `{name_lower}` field."
+                );
                 field_constants.push(quote! {
+                    #[doc = #mask_doc]
                     pub const #mask_name: #base = #shifted_mask;
+                    #[doc = #shift_doc]
                     pub const #shift_name: usize = #low_bit;
                 });
             }
 
             if let Some(default) = &field.default {
                 let default_name = format_ident!("{name_upper}_DEFAULT");
+                let doc = format!(
+                    "Pre-shifted default value of the `{name_lower}` field.",
+                );
                 field_constants.push(quote! {
+                    #[doc = #doc]
                     pub const #default_name: #base = ((#default) as #base) << #low_bit;
                 });
                 checks.push(quote! {
@@ -576,6 +613,7 @@ impl Bitfields {
         let field_metadata = field_metadata.into_iter();
         field_constants.push(
             quote! {
+                /// Metadata of all named fields in the layout.
                 pub const FIELDS: [::bitfld::FieldMetadata::<#base>; #num_fields] = [
                     #(#field_metadata)*
                 ];
@@ -605,8 +643,12 @@ impl Bitfields {
         let default_values = default_values.into_iter();
 
         quote! {
+            /// Mask of all reserved-as-1 bits.
             pub const RSVD1_MASK: #base = #(#rsvd1_values)|* ;
+            /// Mask of all reserved-as-0 bits.
             pub const RSVD0_MASK: #base = #(#rsvd0_values)|* ;
+            /// The default value of the layout, combining all field
+            /// defaults and reserved-as values.
             pub const DEFAULT: #base = #(#default_values)|* ;
 
             #(#field_constants)*
@@ -642,6 +684,8 @@ impl Bitfields {
             }
 
             impl #ty {
+                /// Returns an iterator over (value, metadata) pairs for each
+                /// field.
                 pub fn iter(&self) -> impl ::core::iter::Iterator<Item = (#base, &'static ::bitfld::FieldMetadata<#base>)> {
                     #iter_type(self.0, 0)
                 }
@@ -666,7 +710,7 @@ impl Bitfields {
     fn getters_and_setters(&self) -> impl Iterator<Item = TokenStream2> + '_ {
         self.named
             .iter()
-            .map(|field| field.getter_and_setter(&self.ty.base))
+            .map(|field| field.getter_and_setter(&self.ty))
     }
 
     fn fmt_fn(&self, integral_specifier: &str) -> TokenStream2 {
@@ -867,6 +911,9 @@ impl ToTokens for Bitfields {
             impl #type_name {
                 #constants
 
+                /// Creates a new instance with reserved-as-1 bits set and
+                /// all other bits zeroed (i.e., with a value of
+                /// [`Self::RSVD1_MASK`]).
                 pub const fn new() -> Self {
                     Self(Self::RSVD1_MASK)
                 }
@@ -875,6 +922,8 @@ impl ToTokens for Bitfields {
             }
 
             impl ::core::default::Default for #type_name {
+                /// Returns an instance with the default bits set (i.e,. with a
+                /// value of [`Self::DEFAULT`].
                 fn default() -> Self {
                     Self(Self::DEFAULT)
                 }
