@@ -669,7 +669,7 @@ impl Bitfields {
             #vis struct #iter_type(#base, usize);
 
             impl ::core::iter::Iterator for #iter_type {
-                type Item = (#base, &'static ::bitfld::FieldMetadata<#base>);
+                type Item = (&'static ::bitfld::FieldMetadata<#base>, #base);
 
                 fn next(&mut self) -> Option<Self::Item> {
                     if self.1 >= #num_fields {
@@ -679,27 +679,27 @@ impl Bitfields {
                     let shifted_mask = (1 << (metadata.high_bit - metadata.low_bit + 1)) - 1;
                     let value = (self.0 >> metadata.low_bit) & shifted_mask;
                     self.1 += 1;
-                    Some((value, metadata))
+                    Some((metadata, value))
                 }
             }
 
             impl #ty {
-                /// Returns an iterator over (value, metadata) pairs for each
+                /// Returns an iterator over (metadata, value) pairs for each
                 /// field.
-                pub fn iter(&self) -> impl ::core::iter::Iterator<Item = (#base, &'static ::bitfld::FieldMetadata<#base>)> {
+                pub fn iter(&self) -> impl ::core::iter::Iterator<Item = (&'static ::bitfld::FieldMetadata<#base>, #base, )> {
                     #iter_type(self.0, 0)
                 }
             }
 
             impl ::core::iter::IntoIterator for #ty {
-                type Item = (#base, &'static ::bitfld::FieldMetadata<#base>);
+                type Item = (&'static ::bitfld::FieldMetadata<#base>, #base);
                 type IntoIter = #iter_type;
 
                 fn into_iter(self) -> Self::IntoIter { #iter_type(self.0, 0) }
             }
 
             impl<'a> ::core::iter::IntoIterator for &'a #ty {
-                type Item = (#base, &'static ::bitfld::FieldMetadata<#base>);
+                type Item = (&'static ::bitfld::FieldMetadata<#base>, #base);
                 type IntoIter = #iter_type;
 
                 fn into_iter(self) -> Self::IntoIter { #iter_type(self.0, 0) }

@@ -269,13 +269,13 @@ mod tests {
             ),
         ];
 
-        let actual: Vec<(u64, &'static Metadata)> =
+        let actual: Vec<(&'static Metadata, u64)> =
             example.into_iter().collect();
 
         assert_eq!(actual.len(), EXPECTED.len());
         for i in 0..EXPECTED.len() {
             let (expected_val, expected_metadata) = &EXPECTED[i];
-            let (actual_val, actual_metadata) = &actual[i];
+            let (actual_metadata, actual_val) = &actual[i];
             assert_eq!(actual_val, expected_val, "{i}");
             assert_eq!(actual_metadata.name, expected_metadata.name, "{i}");
             assert_eq!(

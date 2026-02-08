@@ -80,7 +80,7 @@
 //! println!("{example}");
 //!
 //! // Or iterate over all fields and and print them individually.
-//! for (value, metadata) in example {
+//! for (metadata, value) in example {
 //!   println!("{}: {:x}", metadata.name, value);
 //! }
 //! ```

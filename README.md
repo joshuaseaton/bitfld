@@ -25,7 +25,7 @@ values and custom bitfield representations.
 * Specification of default and "reserved-as" values, with `new()` respecting
   reserved-as values and `default()` respecting both;
 * Custom bitfield representation types without any boilerplate;
-* Iteration over individual bitfield values and metadata;
+* Iteration over individual bitfield metadata and values;
 * Associated constants around masks and shifts for use in inline assembly.
 
 For more detail, see `layout!`.
@@ -69,7 +69,7 @@ fn main() {
     println!("{example}");
 
     // Or iterate over all fields and and print them individually.
-    for (value, metadata) in example {
+    for (metadata, value) in example {
       println!("{}: {:x}", metadata.name, value);
     }
 }
