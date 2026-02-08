@@ -287,8 +287,7 @@ impl Bitfield {
         let shifted_mask = &self.shifted_mask;
         let get_value =
             quote! { ((self.0 >> #low_bit) & #shifted_mask) as #min_width };
-        let getter = if self.repr.is_some() {
-            let repr = self.repr.as_ref().unwrap();
+        let getter = if let Some(repr) = &self.repr {
             quote! {
                 #[inline]
                 pub fn #name(&self)
@@ -325,8 +324,7 @@ impl Bitfield {
             }
         };
 
-        let setter = if self.repr.is_some() {
-            let repr = self.repr.as_ref().unwrap();
+        let setter = if let Some(repr) = &self.repr {
             quote! {
                 #[inline]
                 pub fn #setter_name(&mut self, value: #repr) -> &mut Self
@@ -379,14 +377,14 @@ impl Parse for Bitfield {
 
         let name: Option<Ident> = match *pat_type.pat {
             Pat::Ident(ref pat_ident) => {
-                if pat_ident.by_ref.is_some() {
-                    return Err(err(pat_ident.by_ref.as_ref().unwrap()));
+                if let Some(by_ref) = &pat_ident.by_ref {
+                    return Err(err(by_ref));
                 }
-                if pat_ident.mutability.is_some() {
-                    return Err(err(pat_ident.mutability.as_ref().unwrap()));
+                if let Some(mutability) = &pat_ident.mutability {
+                    return Err(err(mutability));
                 }
-                if pat_ident.subpat.is_some() {
-                    return Err(err(&pat_ident.subpat.as_ref().unwrap().0));
+                if let Some(subpat) = &pat_ident.subpat {
+                    return Err(err(&subpat.0));
                 }
                 Some(pat_ident.ident.clone())
             }
@@ -526,9 +524,7 @@ impl Bitfields {
                 });
             }
 
-            if field.default.is_some() {
-                let default = field.default.as_ref().unwrap();
-
+            if let Some(default) = &field.default {
                 let default_name = format_ident!("{field_name}_DEFAULT");
                 field_constants.push(quote! {
                     pub const #default_name: #base = ((#default) as #base) << #low_bit;
