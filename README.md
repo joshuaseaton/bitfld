@@ -21,7 +21,7 @@ values and custom bitfield representations.
     * `Default`
     * `From` over the base type
     * `Deref` and `DerefMut` with a target of the underlying base type
-    * `Debug`, `Display`, `Binary`, `LowerHex`, `UpperHex`, `Octal`
+    * `Debug`, `Binary`, `LowerHex`, `UpperHex`, `Octal`
 * Specification of default and "reserved-as" values, with `new()` respecting
   reserved-as values and `default()` respecting both;
 * Custom bitfield representation types without any boilerplate;

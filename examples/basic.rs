@@ -23,8 +23,6 @@ fn main() {
     macro_rules! print_formatted {
         ($obj:ident) => {
             let obj_name = stringify!($obj);
-            println!("{obj_name}: display: {}", $obj);
-            println!("{obj_name}: alternate: {:#}", $obj);
             println!("{obj_name}: debug: {:?}", $obj);
             println!("{obj_name}: lower hex: {:x}", $obj);
             println!("{obj_name}: upper hex: {:X}", $obj);

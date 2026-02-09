@@ -35,5 +35,5 @@ fn main() {
         .set_asid(1)
         .set_ppn(0xffff)
         .set_mode(RiscvSatpMode::Sv39);
-    println!("{satp:#}");
+    println!("{satp:#?}");
 }

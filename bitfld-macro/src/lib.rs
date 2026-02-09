@@ -788,12 +788,6 @@ impl Bitfields {
         let binary_fmt = self.fmt_fn(":#b");
         let octal_fmt = self.fmt_fn(":#o");
         quote! {
-            impl ::core::fmt::Display for #ty {
-                fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                    ::core::fmt::LowerHex::fmt(self, f)
-                }
-            }
-
             impl ::core::fmt::Debug for #ty {
                 fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                     ::core::fmt::LowerHex::fmt(self, f)

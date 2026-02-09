@@ -30,8 +30,8 @@
 //!     * [`From`] over the base type
 //!     * [`Deref`][`core::ops::Deref`] and [`DerefMut`][`core::ops::DerefMut`],
 //!       with a target of the underlying base type
-//!     * [`Debug`], [`Display`][`core::fmt::Display`],
-//!       [`Binary`][`core::fmt::Binary`], [`LowerHex`][`core::fmt::LowerHex`],
+//!     * [`Debug`], [`Binary`][`core::fmt::Binary`],
+//!       [`LowerHex`][`core::fmt::LowerHex`],
 //!       [`UpperHex`][`core::fmt::UpperHex`], [`Octal`][`core::fmt::Octal`]
 //! * Specification of default and "reserved-as" values, with `new()` respecting
 //!   reserved-as values and `default()` respecting both;
@@ -77,7 +77,7 @@
 //! assert_eq!(*example & 0b1100, 0b0100);
 //!
 //! // Will print: `Example { custom: Option2, foo: 0x0, bar: 0x3, baz: false, frob: 0xa }`
-//! println!("{example}");
+//! println!("{example:?}");
 //!
 //! // Or iterate over all fields and and print them individually.
 //! for (metadata, value) in example {
@@ -263,9 +263,9 @@ use core::fmt;
 /// * [`From`] over the base type
 /// * [`Deref`][`core::ops::Deref`] and [`DerefMut`][`core::ops::DerefMut`],
 ///   with a target of the base type
-/// * [`Debug`], [`Display`][`core::fmt::Display`],
-///   [`Binary`][`core::fmt::Binary`], [`LowerHex`][`core::fmt::LowerHex`],
-///   [`UpperHex`][`core::fmt::UpperHex`], [`Octal`][`core::fmt::Octal`]
+/// * [`Debug`], [`Binary`][`core::fmt::Binary`],
+///   [`LowerHex`][`core::fmt::LowerHex`], [`UpperHex`][`core::fmt::UpperHex`],
+///   [`Octal`][`core::fmt::Octal`]
 ///
 /// [`IntoIterator`] is also implemented to [iterate](#iteration) over
 /// individual field values and metadata.
