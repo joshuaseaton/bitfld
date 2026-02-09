@@ -308,7 +308,7 @@ use core::fmt;
 ///
 /// A width-1 field named `foo` will yield a getter and setter of that bit's
 /// content of the forms
-/// ```ignore
+/// ```text
 /// const pub fn foo(&self) -> bool;
 ///
 /// const pub fn set_foo(&mut self, value: bool) -> &mut Self;
@@ -318,7 +318,7 @@ use core::fmt;
 /// [custom represention][#fields-with-custom-representations] (given by `$repr`
 /// above) yields a getter and setter over its range
 ///
-/// ```ignore
+/// ```text
 /// const pub fn foo(&self) -> MinWidth<$high, $low>;
 ///
 /// const pub fn set_foo(&mut self, value: MinWidth<$high, $low>) -> &mut Self;
@@ -341,7 +341,7 @@ use core::fmt;
 /// representation_, which is a type specified as `$repr` above. The
 /// corresponding getter and setter are of the forms
 ///
-/// ```ignore
+/// ```text
 /// const fn foo(&self) -> Result<$repr, bitfld::InvalidBits<MinWidth<$high, $low>>
 /// where
 ///     $repr: zerocopy::TryFromBytes;
