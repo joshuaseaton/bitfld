@@ -8,7 +8,7 @@
 members = [ ".", "bitfld-macro" ]
 
 [workspace.package]
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 
 license = "MIT"
@@ -37,7 +37,7 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-bitfld-macro = { version = "0.3.0", path = "bitfld-macro" }
+bitfld-macro = { version = "0.4.0", path = "bitfld-macro" }
 
 [dev-dependencies]
 zerocopy = { version = "0.8", features = [ "derive" ] }

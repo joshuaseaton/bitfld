@@ -454,9 +454,9 @@ pub struct FieldMetadata<Base: Unsigned> {
     /// The name of the bitfield.
     pub name: &'static str,
     /// The high bit of the bitfield.
-    pub high_bit: usize,
+    pub high_bit: u32,
     /// The low bit of the bitfield.
-    pub low_bit: usize,
+    pub low_bit: u32,
     /// The default value of the bitfield.
     pub default: Base,
 }
