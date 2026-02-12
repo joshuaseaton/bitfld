@@ -287,7 +287,7 @@ impl Bitfield {
                     if value {
                         self.0 |= (1 << #low_bit);
                     } else {
-                        self.0 &= (1 << #low_bit);
+                        self.0 &= !(1 << #low_bit);
                     }
                     self
                 }
