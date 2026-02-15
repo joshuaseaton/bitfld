@@ -119,6 +119,8 @@ use core::fmt;
 ///         <code>{</code>
 ///             <em>LayoutType</em>
 ///             <code>{</code>
+///                 <em>TargetPointerWidthCfgBlock</em>
+///                 <sup>*</sup>
 ///                 <em>Bitfield</em>
 ///                 <sup>*</sup>
 ///             <code>}</code>
@@ -150,24 +152,24 @@ use core::fmt;
 ///         <code>;</code>
 ///     <br>
 ///     <br>
-///     <em>Bitfield</em>:
-///     <br>
-///     &nbsp;&nbsp;
-///         <em>CfgTargetPointerWidth</em>
-///         <sup>?</sup>
-///     <br>
-///     &nbsp;&nbsp;&nbsp;&nbsp;
-///         <em>NamedBitfield</em>
-///         &nbsp;|&nbsp;
-///         <em>ReservedBitfield</em>
-///     <br>
-///     <br>
-///     <em>CfgTargetPointerWidth</em>:
+///     <em>TargetPointerWidthCfgBlock</em>:
 ///     <br>
 ///     &nbsp;&nbsp;
 ///         <code>#[cfg(target_pointer_width = </code>
 ///         <a href="https://doc.rust-lang.org/reference/tokens.html#string-literals">STRING_LITERAL </a>
 ///         <code>)]</code>
+///         <code>{</code>
+///             <em>Bitfield</em>
+///             <sup>*</sup>
+///         <code>}</code>
+///     <br>
+///     <br>
+///     <em>Bitfield</em>:
+///     <br>
+///     &nbsp;&nbsp;&nbsp;&nbsp;
+///         <em>NamedBitfield</em>
+///         &nbsp;|&nbsp;
+///         <em>ReservedBitfield</em>
 ///     <br>
 ///     <br>
 ///     <em>NamedBitfield</em>:
@@ -427,32 +429,33 @@ use core::fmt;
 /// width. To ergonomically support these with more uniform syntax, we support
 /// `usize` as a layout base type as well.
 ///
-/// Width-dependent fields may be annotated with a
-/// `#[cfg(target_pointer_width = "...")]` attribute. This allows for multiple
+/// Width-dependent fields may be grouped within cfg blocks, each annotated with
+/// a `#[cfg(target_pointer_width = "...")]` attribute. This allows for multiple
 /// mutually exclusive definitions of the same fields (or sequences of them),
-/// and for us to keep field bounds as literals for straightforwad overlap
+/// and for us to keep field bounds as literals for straightforward overlap
 /// checks at macro-evaluation time. Fields with differing pointer-width
 /// conditions may overlap; all other overlapping fields remain an error.
 /// High-bit bounds checks on the other hand are deferred to compile time.
 ///
-/// The cfg attribute is only permitted on fields of `usize`-based layouts, and
-/// at most one is permitted per field.
+/// Any cfg blocks must appear before any bare (unconditioned) field
+/// declarations, and at most one block per pointer-width value is permitted.
+/// Further, cfg blocks are only permitted in `usize`-based layouts.
 ///
-/// For example, a layout modeling RISC-V's `mstatus` register:
+/// For example, a layout modeling RISC-V's `mcause` register:
 /// ```rust
 /// use bitfld::layout;
 ///
 /// layout!({
 ///     struct Mcause(usize);
 ///     {
-///         #[cfg(target_pointer_width = "64")]
-///         let interrupt: Bit<63>;
-///         #[cfg(target_pointer_width = "32")]
-///         let interrupt: Bit<31>;
-///         #[cfg(target_pointer_width = "64")]
-///         let code: Bits<62, 0>;
-///         #[cfg(target_pointer_width = "32")]
-///         let code: Bits<30, 0>;
+///         #[cfg(target_pointer_width = "64")] {
+///             let interrupt: Bit<63>;
+///             let code: Bits<62, 0>;
+///         }
+///         #[cfg(target_pointer_width = "32")] {
+///             let interrupt: Bit<31>;
+///             let code: Bits<30, 0>;
+///         }
 ///     }
 /// });
 /// ```

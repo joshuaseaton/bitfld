@@ -4,11 +4,13 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT#
 
+use std::collections::HashSet;
 use std::str::FromStr;
 
 use proc_macro::TokenStream;
 use proc_macro2::{Literal, Span, TokenStream as TokenStream2};
 use quote::{ToTokens, format_ident, quote};
+use syn::parse::discouraged::Speculative;
 use syn::parse::{Error, Parse, ParseStream, Result};
 use syn::spanned::Spanned;
 use syn::{
@@ -451,26 +453,12 @@ impl Parse for Bitfield {
             return Err(err(&stmt));
         };
 
-        let non_cfg =
-            local.attrs.iter().find(|attr| !attr.path().is_ident("cfg"));
-        if let Some(non_cfg) = non_cfg {
+        if let Some(attr) = local.attrs.first() {
             return Err(Error::new_spanned(
-                non_cfg,
-                "only #[cfg] attributes are permitted on fields",
+                attr,
+                "attributes are not permitted on individual fields",
             ));
         }
-        let cfg_pointer_width = if let Some(attr) = local.attrs.first() {
-            if local.attrs.len() > 1 {
-                return Err(Error::new(
-                    stmt.span(),
-                    "at most one #[cfg(target_pointer_width = \"...\")] \
-                     attribute is permitted per field",
-                ));
-            }
-            Some(parse_target_pointer_width_cfg(attr)?)
-        } else {
-            None
-        };
 
         let Pat::Type(ref pat_type) = local.pat else {
             return Err(err(&local));
@@ -586,7 +574,7 @@ impl Parse for Bitfield {
             high,
             low,
             repr,
-            cfg_pointer_width,
+            None,
             default_or_value,
         ))
     }
@@ -994,21 +982,64 @@ impl Parse for Bitfields {
         };
 
         let mut fields = Vec::new();
-        while !input.is_empty() {
-            fields.push(input.parse::<Bitfield>()?);
-        }
-
         let mut errors = Vec::new();
-
         let is_usize = matches!(ty.base.ty, BaseType::Usize);
-        for field in &fields {
-            if field.cfg_pointer_width.is_some() && !is_usize {
-                errors.push(Error::new(
-                    field.span,
-                    "#[cfg] attributes are only permitted on fields of \
-                     `usize`-based layouts",
+
+        // Phase 1: parse cfg blocks. Each is `#[cfg(...)] { fields }`.
+        // We use a fork to distinguish a cfg block from a bare field with
+        // a stray attribute (which the field parser will reject).
+        let mut seen_widths = HashSet::new();
+        while input.peek(syn::Token![#]) {
+            let fork = input.fork();
+            let attrs = fork.call(Attribute::parse_outer)?;
+            if !fork.peek(syn::token::Brace) {
+                break;
+            }
+            input.advance_to(&fork);
+
+            let attr = &attrs[0];
+            if attrs.len() > 1 {
+                return Err(Error::new_spanned(
+                    &attrs[1],
+                    "expected `{` after cfg attribute",
                 ));
             }
+            let width = parse_target_pointer_width_cfg(attr)?;
+
+            if !is_usize {
+                errors.push(Error::new_spanned(
+                    attr,
+                    "#[cfg] blocks are only permitted in `usize`-based layouts",
+                ));
+            }
+            if seen_widths.contains(width.as_str()) {
+                errors.push(Error::new_spanned(
+                    attr,
+                    format!(
+                        "duplicate cfg block for target_pointer_width = \"{width}\""
+                    ),
+                ));
+            }
+
+            let block;
+            braced!(block in input);
+            if block.is_empty() {
+                errors.push(Error::new_spanned(
+                    attr,
+                    "cfg block must contain at least one field",
+                ));
+            }
+            while !block.is_empty() {
+                let mut field = block.parse::<Bitfield>()?;
+                field.cfg_pointer_width = Some(width.clone());
+                fields.push(field);
+            }
+            seen_widths.insert(width);
+        }
+
+        // Phase 2: bare fields.
+        while !input.is_empty() {
+            fields.push(input.parse::<Bitfield>()?);
         }
 
         fields.sort_by_key(|field| field.low_bit);
@@ -1024,6 +1055,7 @@ impl Parse for Bitfields {
                     break;
                 }
                 let can_overlap = curr.cfg_pointer_width.is_some()
+                    && next.cfg_pointer_width.is_some()
                     && curr.cfg_pointer_width != next.cfg_pointer_width;
                 if !can_overlap {
                     // TODO(https://github.com/rust-lang/rust/issues/54725): It

@@ -13,13 +13,15 @@ layout!({
     struct Mcause(usize);
     {
         #[cfg(target_pointer_width = "64")]
-        let interrupt: Bit<63>;
+        {
+            let interrupt: Bit<63>;
+            let code: Bits<62, 0>;
+        }
         #[cfg(target_pointer_width = "32")]
-        let interrupt: Bit<31>;
-        #[cfg(target_pointer_width = "64")]
-        let code: Bits<62, 0>;
-        #[cfg(target_pointer_width = "32")]
-        let code: Bits<30, 0>;
+        {
+            let interrupt: Bit<31>;
+            let code: Bits<30, 0>;
+        }
     }
 });
 
@@ -49,9 +51,13 @@ layout!({
     struct Mstatus(usize);
     {
         #[cfg(target_pointer_width = "64")]
-        let sd: Bit<63>;
+        {
+            let sd: Bit<63>;
+        }
         #[cfg(target_pointer_width = "32")]
-        let sd: Bit<31>;
+        {
+            let sd: Bit<31>;
+        }
         let tsr: Bit<22>;
         let tw: Bit<21>;
         let tvm: Bit<20>;
