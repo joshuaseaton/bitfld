@@ -12,8 +12,9 @@ use quote::{ToTokens, format_ident, quote};
 use syn::parse::{Error, Parse, ParseStream, Result};
 use syn::spanned::Spanned;
 use syn::{
-    Expr, ExprLit, Fields, GenericArgument, Ident, ItemStruct, Lit, Pat, Path,
-    PathArguments, Stmt, Type, braced, parse_macro_input, parse_quote,
+    Attribute, Expr, ExprLit, Fields, GenericArgument, Ident, ItemStruct, Lit,
+    MetaNameValue, Pat, Path, PathArguments, Stmt, Type, braced,
+    parse_macro_input, parse_quote,
 };
 
 #[proc_macro_attribute]
@@ -52,16 +53,18 @@ enum BaseType {
     U32,
     U64,
     U128,
+    Usize,
 }
 
 impl BaseType {
-    const fn high_bit(&self) -> usize {
+    const fn high_bit(&self) -> Option<usize> {
         match *self {
-            Self::U8 => 7,
-            Self::U16 => 15,
-            Self::U32 => 31,
-            Self::U64 => 63,
-            Self::U128 => 127,
+            Self::U8 => Some(7),
+            Self::U16 => Some(15),
+            Self::U32 => Some(31),
+            Self::U64 => Some(63),
+            Self::U128 => Some(127),
+            Self::Usize => None,
         }
     }
 }
@@ -91,6 +94,8 @@ impl TryFrom<Type> for BaseTypeDef {
             BaseType::U64
         } else if path.is_ident("u128") {
             BaseType::U128
+        } else if path.is_ident("usize") {
+            BaseType::Usize
         } else {
             return Err(Error::new_spanned(path, INVALID_BASE_TYPE));
         };
@@ -180,6 +185,7 @@ struct Bitfield {
     high_bit: usize,
     low_bit: usize,
     repr: Option<Type>,
+    cfg_pointer_width: Option<String>,
 
     //
     default: Option<Box<Expr>>,
@@ -195,6 +201,7 @@ impl Bitfield {
         high_bit: usize,
         low_bit: usize,
         repr: Option<Type>,
+        cfg_pointer_width: Option<String>,
         default: Option<Box<Expr>>,
     ) -> Self {
         let shifted_mask = {
@@ -230,6 +237,7 @@ impl Bitfield {
             high_bit,
             low_bit,
             repr,
+            cfg_pointer_width,
             default,
             shifted_mask,
         }
@@ -237,6 +245,29 @@ impl Bitfield {
 
     const fn is_reserved(&self) -> bool {
         self.name.is_none()
+    }
+
+    fn display_name(&self) -> String {
+        match &self.name {
+            Some(name) => format!("`{name}`"),
+            None => "reserved".to_string(),
+        }
+    }
+
+    fn display_kind(&self) -> &'static str {
+        if self.bit_width() == 1 {
+            "bit"
+        } else {
+            "field"
+        }
+    }
+
+    fn display_range(&self) -> String {
+        if self.bit_width() == 1 {
+            format!("{}", self.low_bit)
+        } else {
+            format!("[{}:{}]", self.high_bit, self.low_bit)
+        }
     }
 
     const fn bit_width(&self) -> usize {
@@ -257,6 +288,7 @@ impl Bitfield {
     fn getter_and_setter(&self, ty: &TypeDef) -> TokenStream2 {
         debug_assert!(!self.is_reserved());
 
+        let cfg_attr = cfg_attr(self);
         let name = self.name.as_ref().unwrap();
         let setter_name = format_ident!("set_{}", name);
 
@@ -275,12 +307,14 @@ impl Bitfield {
                 self.low_bit,
             );
             return quote! {
+                #cfg_attr
                 #[doc = #get_doc]
                 #[inline]
                 pub const fn #name(&self) -> bool {
                     (self.0 & (1 << #low_bit)) != 0
                 }
 
+                #cfg_attr
                 #[doc = #set_doc]
                 #[inline]
                 pub const fn #setter_name(&mut self, value: bool) -> &mut Self {
@@ -374,10 +408,18 @@ impl Bitfield {
         };
 
         quote! {
+            #cfg_attr
             #getter
+            #cfg_attr
             #setter
         }
     }
+}
+
+fn cfg_attr(field: &Bitfield) -> Option<TokenStream2> {
+    field.cfg_pointer_width.as_ref().map(|w| {
+        quote! { #[cfg(target_pointer_width = #w)] }
+    })
 }
 
 impl Parse for Bitfield {
@@ -395,6 +437,28 @@ impl Parse for Bitfield {
         let Stmt::Local(ref local) = stmt else {
             return Err(err(&stmt));
         };
+
+        let non_cfg =
+            local.attrs.iter().find(|attr| !attr.path().is_ident("cfg"));
+        if let Some(non_cfg) = non_cfg {
+            return Err(Error::new_spanned(
+                non_cfg,
+                "only #[cfg] attributes are permitted on fields",
+            ));
+        }
+        let cfg_pointer_width = if let Some(attr) = local.attrs.first() {
+            if local.attrs.len() > 1 {
+                return Err(Error::new(
+                    stmt.span(),
+                    "at most one #[cfg(target_pointer_width = \"...\")] \
+                     attribute is permitted per field",
+                ));
+            }
+            Some(parse_target_pointer_width_cfg(attr)?)
+        } else {
+            None
+        };
+
         let Pat::Type(ref pat_type) = local.pat else {
             return Err(err(&local));
         };
@@ -509,8 +573,31 @@ impl Parse for Bitfield {
             high,
             low,
             repr,
+            cfg_pointer_width,
             default_or_value,
         ))
+    }
+}
+
+/// Parses a `#[cfg(target_pointer_width = "...")]` attribute, returning the
+/// width value on success.
+fn parse_target_pointer_width_cfg(attr: &Attribute) -> Result<String> {
+    const ERROR_MSG: &str = "expected #[cfg(target_pointer_width = \"...\")]";
+    let meta = attr
+        .meta
+        .require_list()
+        .map_err(|_| Error::new_spanned(attr, ERROR_MSG))?;
+    let cfg: MetaNameValue = meta
+        .parse_args()
+        .map_err(|_| Error::new_spanned(attr, ERROR_MSG))?;
+    if !cfg.path.is_ident("target_pointer_width") {
+        return Err(Error::new_spanned(attr, ERROR_MSG));
+    }
+    match cfg.value {
+        Expr::Lit(ExprLit {
+            lit: Lit::Str(s), ..
+        }) => Ok(s.value()),
+        _ => Err(Error::new_spanned(attr, ERROR_MSG)),
     }
 }
 
@@ -518,20 +605,24 @@ struct Bitfields {
     ty: TypeDef,
     named: Vec<Bitfield>,
     reserved: Vec<Bitfield>,
+    errors: Vec<Error>,
 }
 
 impl Bitfields {
     fn constants(&self) -> TokenStream2 {
         let base = &self.ty.base.def;
+        let is_usize = matches!(self.ty.base.ty, BaseType::Usize);
 
         let mut field_constants = Vec::new();
         let mut field_metadata = Vec::new();
+        let mut num_field_stmts = Vec::new();
         let mut checks = Vec::new();
-        let mut default_values = vec![quote! {Self::RSVD1_MASK}];
+        let mut default_stmts = Vec::new();
 
         for field in &self.named {
+            let cfg_attr = cfg_attr(field);
             let name_lower = field.name.as_ref().unwrap().to_string();
-            let name_upper = name_lower.clone().to_uppercase();
+            let name_upper = name_lower.to_uppercase();
             let low_bit = Literal::usize_unsuffixed(field.low_bit);
             let shifted_mask = &field.shifted_mask;
 
@@ -539,6 +630,7 @@ impl Bitfields {
                 let bit_name = format_ident!("{name_upper}_BIT");
                 let doc = format!("Bit position of the `{name_lower}` field.",);
                 field_constants.push(quote! {
+                    #cfg_attr
                     #[doc = #doc]
                     pub const #bit_name: usize = #low_bit;
                 });
@@ -551,8 +643,10 @@ impl Bitfields {
                     "Bit shift (i.e., the low bit) of the `{name_lower}` field."
                 );
                 field_constants.push(quote! {
+                    #cfg_attr
                     #[doc = #mask_doc]
                     pub const #mask_name: #base = #shifted_mask;
+                    #cfg_attr
                     #[doc = #shift_doc]
                     pub const #shift_name: usize = #low_bit;
                 });
@@ -564,13 +658,26 @@ impl Bitfields {
                     "Pre-shifted default value of the `{name_lower}` field.",
                 );
                 field_constants.push(quote! {
+                    #cfg_attr
                     #[doc = #doc]
                     pub const #default_name: #base = ((#default) as #base) << #low_bit;
                 });
                 checks.push(quote! {
+                    #cfg_attr
                     const { assert!(Self::#default_name & !(#shifted_mask << #low_bit) == 0) }
                 });
-                default_values.push(quote! { Self::#default_name });
+                default_stmts.push(quote! {
+                    #cfg_attr
+                    { v |= Self::#default_name; }
+                });
+            }
+
+            if is_usize {
+                let high_bit = Literal::usize_unsuffixed(field.high_bit);
+                checks.push(quote! {
+                    #cfg_attr
+                    const { assert!(#high_bit < usize::BITS as usize) }
+                });
             }
 
             let high_bit = Literal::usize_unsuffixed(field.high_bit);
@@ -580,6 +687,7 @@ impl Bitfields {
                 quote! { 0 }
             };
             field_metadata.push(quote! {
+                #cfg_attr
                 ::bitfld::FieldMetadata::<#base>{
                     name: #name_lower,
                     high_bit: #high_bit,
@@ -587,40 +695,59 @@ impl Bitfields {
                     default: #default as #base,
                 },
             });
+            num_field_stmts.push(quote! {
+                #cfg_attr
+                { n += 1; }
+            });
         }
 
-        let mut rsvd1_values = Vec::new();
-        let mut rsvd0_values = Vec::new();
+        let mut rsvd1_stmts = Vec::new();
+        let mut rsvd0_stmts = Vec::new();
         for rsvd in &self.reserved {
+            let cfg_attr = cfg_attr(rsvd);
             let rsvd_value = rsvd.default.as_ref().unwrap();
             let low_bit = Literal::usize_unsuffixed(rsvd.low_bit);
             let shifted_mask = &rsvd.shifted_mask;
             let name = format_ident!("RSVD_{}_{}", rsvd.high_bit, rsvd.low_bit);
 
             field_constants.push(quote! {
+                #cfg_attr
                 const #name: #base = (#rsvd_value as #base) << #low_bit;
             });
             checks.push(quote! {
+                #cfg_attr
                 const { assert!(Self::#name & !(#shifted_mask << #low_bit) == 0) }
             });
-            rsvd1_values.push(quote! { Self::#name });
-            rsvd0_values.push(quote! {
-                (!Self::#name & (#shifted_mask << #low_bit))
+            rsvd1_stmts.push(quote! {
+                #cfg_attr
+                { v |= Self::#name; }
             });
+            rsvd0_stmts.push(quote! {
+                #cfg_attr
+                { v |= !Self::#name & (#shifted_mask << #low_bit); }
+            });
+
+            if is_usize {
+                let high_bit = Literal::usize_unsuffixed(rsvd.high_bit);
+                checks.push(quote! {
+                    #cfg_attr
+                    const { assert!(#high_bit < usize::BITS as usize) }
+                });
+            }
         }
 
-        let num_fields = Literal::usize_unsuffixed(self.named.len());
-        let field_metadata = field_metadata.into_iter();
-        field_constants.push(
-            quote! {
-                /// Metadata of all named fields in the layout.
-                pub const FIELDS: [::bitfld::FieldMetadata::<#base>; #num_fields] = [
-                    #(#field_metadata)*
-                ];
-            }
-        );
-
-        let field_constants = field_constants.into_iter();
+        field_constants.push(quote! {
+            #[doc(hidden)]
+            const NUM_FIELDS: usize = {
+                let mut n = 0usize;
+                #(#num_field_stmts)*
+                n
+            };
+            /// Metadata of all named fields in the layout.
+            pub const FIELDS: [::bitfld::FieldMetadata::<#base>; Self::NUM_FIELDS] = [
+                #(#field_metadata)*
+            ];
+        });
 
         let check_fn = if checks.is_empty() {
             quote! {}
@@ -634,22 +761,26 @@ impl Bitfields {
             }
         };
 
-        if self.reserved.is_empty() {
-            rsvd1_values.push(quote! {0});
-            rsvd0_values.push(quote! {0});
-        }
-        let rsvd1_values = rsvd1_values.into_iter();
-        let rsvd0_values = rsvd0_values.into_iter();
-        let default_values = default_values.into_iter();
-
         quote! {
             /// Mask of all reserved-as-1 bits.
-            pub const RSVD1_MASK: #base = #(#rsvd1_values)|* ;
+            pub const RSVD1_MASK: #base = {
+                let mut v: #base = 0;
+                #(#rsvd1_stmts)*
+                v
+            };
             /// Mask of all reserved-as-0 bits.
-            pub const RSVD0_MASK: #base = #(#rsvd0_values)|* ;
+            pub const RSVD0_MASK: #base = {
+                let mut v: #base = 0;
+                #(#rsvd0_stmts)*
+                v
+            };
             /// The default value of the layout, combining all field
             /// defaults and reserved-as values.
-            pub const DEFAULT: #base = #(#default_values)|* ;
+            pub const DEFAULT: #base = {
+                let mut v: #base = Self::RSVD1_MASK;
+                #(#default_stmts)*
+                v
+            };
 
             #(#field_constants)*
 
@@ -662,7 +793,6 @@ impl Bitfields {
         let base = &self.ty.base.def;
         let iter_type = format_ident!("{}Iter", ty);
         let vis = &self.ty.def.vis;
-        let num_fields = Literal::usize_unsuffixed(self.named.len());
 
         quote! {
             #[doc(hidden)]
@@ -672,7 +802,7 @@ impl Bitfields {
                 type Item = (&'static ::bitfld::FieldMetadata<#base>, #base);
 
                 fn next(&mut self) -> Option<Self::Item> {
-                    if self.1 >= #num_fields {
+                    if self.1 >= #ty::NUM_FIELDS {
                         return None;
                     }
                     let metadata = &#ty::FIELDS[self.1];
@@ -735,7 +865,8 @@ impl Bitfields {
             quote! {}
         };
 
-        let fmt_fields = self.named.iter().enumerate().map(|(idx, field)| {
+        let fmt_fields = self.named.iter().map(|field| {
+            let cfg_attr = cfg_attr(field);
             let name = &field.name;
             let name_str = name.as_ref().unwrap().to_string();
             let default_specifier = if field.bit_width() == 1 {
@@ -743,25 +874,32 @@ impl Bitfields {
             } else {
                 integral_specifier
             };
-            let comma = if idx < self.named.len() - 1 { "," } else { "" };
             if field.repr.is_some() {
-                let ok_format_string = format!("{{indent}}{name_str}: {{:#?}}{comma}{{sep}}");
+                let ok_format_string =
+                    format!("{{indent}}{name_str}: {{:#?}},{{sep}}");
                 let ok_format_string = Literal::string(&ok_format_string);
                 let err_format_string = format!(
-                    "{{indent}}{name_str}: InvalidBits({{{default_specifier}}}){comma}{{sep}}"
+                    "{{indent}}{name_str}: InvalidBits({{{default_specifier}}}),{{sep}}"
                 );
                 let err_format_string = Literal::string(&err_format_string);
                 quote! {
-                    match self.#name() {
-                        Ok(value) => write!(f, #ok_format_string, value),
-                        Err(invalid) => write!(f, #err_format_string, invalid.0),
-                    }?;
+                    #cfg_attr
+                    {
+                        match self.#name() {
+                            Ok(value) => write!(f, #ok_format_string, value),
+                            Err(invalid) => write!(f, #err_format_string, invalid.0),
+                        }?;
+                    }
                 }
             } else {
-                let format_string =
-                    format!("{{indent}}{name_str}: {{{default_specifier}}}{comma}{{sep}}");
+                let format_string = format!(
+                    "{{indent}}{name_str}: {{{default_specifier}}},{{sep}}"
+                );
                 let format_string = Literal::string(&format_string);
-                quote! {write!(f, #format_string, self.#name())?;}
+                quote! {
+                    #cfg_attr
+                    { write!(f, #format_string, self.#name())?; }
+                }
             }
         });
 
@@ -833,45 +971,73 @@ impl Parse for Bitfields {
         while !input.is_empty() {
             fields.push(input.parse::<Bitfield>()?);
         }
-        fields.sort_by_key(|field| field.low_bit);
 
-        for i in 1..fields.len() {
-            let prev = &fields[i - 1];
-            let curr = &fields[i];
-            if prev.high_bit >= curr.low_bit {
-                // TODO(https://github.com/rust-lang/rust/issues/54725): It
-                // would be nice to Span::join() the two spans, but that's still
-                // experimental.
-                return Err(Error::new(
-                    curr.span,
-                    format!(
-                        "field overlaps with another: [{}:{}] vs. [{}:{}]",
-                        prev.high_bit,
-                        prev.low_bit,
-                        curr.high_bit,
-                        curr.low_bit
-                    ),
+        let mut errors = Vec::new();
+
+        let is_usize = matches!(ty.base.ty, BaseType::Usize);
+        for field in &fields {
+            if field.cfg_pointer_width.is_some() && !is_usize {
+                errors.push(Error::new(
+                    field.span,
+                    "#[cfg] attributes are only permitted on fields of \
+                     `usize`-based layouts",
                 ));
             }
         }
 
-        if let Some(highest) = fields.last() {
-            let highest_possible = ty.base.ty.high_bit();
-            if highest.high_bit > highest_possible {
-                return Err(Error::new(
-                    highest.span,
-                    format!(
-                        "high bit {} exceeds the highest possible value of {highest_possible}",
-                        highest.high_bit
-                    ),
-                ));
+        fields.sort_by_key(|field| field.low_bit);
+
+        for i in 0..fields.len() {
+            let curr = &fields[i];
+
+            // The might be multiple overlapping fields, and some might be valid
+            // if mutually excluded due to differing target pointer cfg
+            // conditions.
+            for next in fields.iter().skip(i + 1) {
+                if curr.high_bit < next.low_bit {
+                    break;
+                }
+                let can_overlap = curr.cfg_pointer_width.is_some()
+                    && curr.cfg_pointer_width != next.cfg_pointer_width;
+                if !can_overlap {
+                    // TODO(https://github.com/rust-lang/rust/issues/54725): It
+                    // would be nice to Span::join() the two spans, but that's still
+                    // experimental.
+                    errors.push(Error::new(
+                        next.span,
+                        format!(
+                            "{} ({} {}) overlaps with {} ({} {})",
+                            next.display_name(),
+                            next.display_kind(),
+                            next.display_range(),
+                            curr.display_name(),
+                            curr.display_kind(),
+                            curr.display_range(),
+                        ),
+                    ));
+                }
             }
+        }
+
+        if let Some(highest_possible) = ty.base.ty.high_bit()
+            && let Some(highest) = fields.last()
+            && highest.high_bit > highest_possible
+        {
+            errors.push(Error::new(
+                highest.span,
+                format!(
+                    "high bit {} exceeds the highest possible value \
+                     of {highest_possible}",
+                    highest.high_bit
+                ),
+            ));
         }
 
         let mut bitfld = Self {
             ty,
             named: vec![],
             reserved: vec![],
+            errors,
         };
 
         while let Some(field) = fields.pop() {
@@ -893,6 +1059,17 @@ impl ToTokens for Bitfields {
         let type_def = &self.ty.def;
         let type_name = &type_def.ident;
         let base = &self.ty.base.def;
+
+        if !self.errors.is_empty() {
+            let errors = self.errors.iter().map(Error::to_compile_error);
+            quote! {
+                #[derive(Copy, Clone, Eq, PartialEq)]
+                #type_def
+                #(#errors)*
+            }
+            .to_tokens(tokens);
+            return;
+        }
 
         let constants = self.constants();
         let getters_and_setters = self.getters_and_setters();
