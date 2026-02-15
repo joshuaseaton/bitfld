@@ -168,6 +168,19 @@ impl Parse for TypeDef {
             ));
         };
 
+        if let Some(param) = strct.generics.type_params().next() {
+            return Err(Error::new_spanned(
+                &param.ident,
+                "only const generic parameters are supported",
+            ));
+        }
+        if let Some(param) = strct.generics.lifetimes().next() {
+            return Err(Error::new_spanned(
+                param,
+                "only const generic parameters are supported",
+            ));
+        }
+
         Ok(Self {
             def: strct,
             base: base_type,
@@ -664,7 +677,7 @@ impl Bitfields {
                 });
                 checks.push(quote! {
                     #cfg_attr
-                    const { assert!(Self::#default_name & !(#shifted_mask << #low_bit) == 0) }
+                    const { assert!(((#default) as #base) << #low_bit & !(#shifted_mask << #low_bit) == 0) }
                 });
                 default_stmts.push(quote! {
                     #cfg_attr
@@ -716,7 +729,7 @@ impl Bitfields {
             });
             checks.push(quote! {
                 #cfg_attr
-                const { assert!(Self::#name & !(#shifted_mask << #low_bit) == 0) }
+                const { assert!((#rsvd_value as #base) << #low_bit & !(#shifted_mask << #low_bit) == 0) }
             });
             rsvd1_stmts.push(quote! {
                 #cfg_attr
@@ -736,15 +749,18 @@ impl Bitfields {
             }
         }
 
-        field_constants.push(quote! {
-            #[doc(hidden)]
-            const NUM_FIELDS: usize = {
+        let num_fields_expr = quote! {
+            {
                 let mut n = 0usize;
                 #(#num_field_stmts)*
                 n
-            };
+            }
+        };
+        field_constants.push(quote! {
+            #[doc(hidden)]
+            const NUM_FIELDS: usize = #num_fields_expr;
             /// Metadata of all named fields in the layout.
-            pub const FIELDS: [::bitfld::FieldMetadata::<#base>; Self::NUM_FIELDS] = [
+            pub const FIELDS: [::bitfld::FieldMetadata::<#base>; #num_fields_expr] = [
                 #(#field_metadata)*
             ];
         });
@@ -794,18 +810,26 @@ impl Bitfields {
         let iter_type = format_ident!("{}Iter", ty);
         let vis = &self.ty.def.vis;
 
+        let generics = &self.ty.def.generics;
+        let (impl_generics, ty_generics, where_clause) =
+            generics.split_for_impl();
+
+        let mut ref_generics = generics.clone();
+        ref_generics.params.insert(0, parse_quote!('a));
+        let (ref_impl_generics, _, _) = ref_generics.split_for_impl();
+
         quote! {
             #[doc(hidden)]
-            #vis struct #iter_type(#base, usize);
+            #vis struct #iter_type #impl_generics (#base, usize) #where_clause;
 
-            impl ::core::iter::Iterator for #iter_type {
+            impl #impl_generics ::core::iter::Iterator for #iter_type #ty_generics #where_clause {
                 type Item = (&'static ::bitfld::FieldMetadata<#base>, #base);
 
                 fn next(&mut self) -> Option<Self::Item> {
-                    if self.1 >= #ty::NUM_FIELDS {
+                    if self.1 >= <#ty #ty_generics>::NUM_FIELDS {
                         return None;
                     }
-                    let metadata = &#ty::FIELDS[self.1];
+                    let metadata = &<#ty #ty_generics>::FIELDS[self.1];
                     let shifted_mask = (1 << (metadata.high_bit - metadata.low_bit + 1)) - 1;
                     let value = (self.0 >> metadata.low_bit) & shifted_mask;
                     self.1 += 1;
@@ -813,24 +837,24 @@ impl Bitfields {
                 }
             }
 
-            impl #ty {
+            impl #impl_generics #ty #ty_generics #where_clause {
                 /// Returns an iterator over (metadata, value) pairs for each
                 /// field.
-                pub fn iter(&self) -> impl ::core::iter::Iterator<Item = (&'static ::bitfld::FieldMetadata<#base>, #base, )> {
+                pub fn iter(&self) -> #iter_type #ty_generics {
                     #iter_type(self.0, 0)
                 }
             }
 
-            impl ::core::iter::IntoIterator for #ty {
+            impl #impl_generics ::core::iter::IntoIterator for #ty #ty_generics #where_clause {
                 type Item = (&'static ::bitfld::FieldMetadata<#base>, #base);
-                type IntoIter = #iter_type;
+                type IntoIter = #iter_type #ty_generics;
 
                 fn into_iter(self) -> Self::IntoIter { #iter_type(self.0, 0) }
             }
 
-            impl<'a> ::core::iter::IntoIterator for &'a #ty {
+            impl #ref_impl_generics ::core::iter::IntoIterator for &'a #ty #ty_generics #where_clause {
                 type Item = (&'static ::bitfld::FieldMetadata<#base>, #base);
-                type IntoIter = #iter_type;
+                type IntoIter = #iter_type #ty_generics;
 
                 fn into_iter(self) -> Self::IntoIter { #iter_type(self.0, 0) }
             }
@@ -921,30 +945,32 @@ impl Bitfields {
 
     fn fmt_impls(&self) -> TokenStream2 {
         let ty = &self.ty.def.ident;
+        let (impl_generics, ty_generics, where_clause) =
+            self.ty.def.generics.split_for_impl();
         let lower_hex_fmt = self.fmt_fn(":#x");
         let upper_hex_fmt = self.fmt_fn(":#X");
         let binary_fmt = self.fmt_fn(":#b");
         let octal_fmt = self.fmt_fn(":#o");
         quote! {
-            impl ::core::fmt::Debug for #ty {
+            impl #impl_generics ::core::fmt::Debug for #ty #ty_generics #where_clause {
                 fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                     ::core::fmt::LowerHex::fmt(self, f)
                 }
             }
 
-            impl ::core::fmt::Binary for #ty {
+            impl #impl_generics ::core::fmt::Binary for #ty #ty_generics #where_clause {
                 #binary_fmt
             }
 
-            impl ::core::fmt::LowerHex for #ty {
+            impl #impl_generics ::core::fmt::LowerHex for #ty #ty_generics #where_clause {
                 #lower_hex_fmt
             }
 
-            impl ::core::fmt::UpperHex for #ty {
+            impl #impl_generics ::core::fmt::UpperHex for #ty #ty_generics #where_clause {
                 #upper_hex_fmt
             }
 
-            impl ::core::fmt::Octal for #ty {
+            impl #impl_generics ::core::fmt::Octal for #ty #ty_generics #where_clause {
                 #octal_fmt
             }
         }
@@ -1060,6 +1086,9 @@ impl ToTokens for Bitfields {
         let type_name = &type_def.ident;
         let base = &self.ty.base.def;
 
+        let (impl_generics, ty_generics, where_clause) =
+            type_def.generics.split_for_impl();
+
         if !self.errors.is_empty() {
             let errors = self.errors.iter().map(Error::to_compile_error);
             quote! {
@@ -1079,7 +1108,7 @@ impl ToTokens for Bitfields {
             #[derive(Copy, Clone, Eq, PartialEq)]
             #type_def
 
-            impl #type_name {
+            impl #impl_generics #type_name #ty_generics #where_clause {
                 #constants
 
                 /// Creates a new instance with reserved-as-1 bits set and
@@ -1092,7 +1121,7 @@ impl ToTokens for Bitfields {
                 #(#getters_and_setters)*
             }
 
-            impl ::core::default::Default for #type_name {
+            impl #impl_generics ::core::default::Default for #type_name #ty_generics #where_clause {
                 /// Returns an instance with the default bits set (i.e,. with a
                 /// value of [`Self::DEFAULT`].
                 fn default() -> Self {
@@ -1100,7 +1129,7 @@ impl ToTokens for Bitfields {
                 }
             }
 
-            impl ::core::convert::From<#base> for #type_name {
+            impl #impl_generics ::core::convert::From<#base> for #type_name #ty_generics #where_clause {
                 // `RSVD{0,1}_MASK` may be zero, in which case the following
                 // mask conditions might be trivially true.
                 #[allow(clippy::bad_bit_mask)]
@@ -1119,7 +1148,7 @@ impl ToTokens for Bitfields {
                 }
             }
 
-            impl ::core::ops::Deref for #type_name {
+            impl #impl_generics ::core::ops::Deref for #type_name #ty_generics #where_clause {
                 type Target = #base;
 
                 fn deref(&self) -> &Self::Target {
@@ -1127,7 +1156,7 @@ impl ToTokens for Bitfields {
                 }
             }
 
-            impl ::core::ops::DerefMut for #type_name {
+            impl #impl_generics ::core::ops::DerefMut for #type_name #ty_generics #where_clause {
                 fn deref_mut(&mut self) -> &mut Self::Target {
                     &mut self.0
                 }
