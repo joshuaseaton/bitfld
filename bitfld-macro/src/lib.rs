@@ -808,13 +808,13 @@ impl Bitfields {
 
         quote! {
             #[doc(hidden)]
-            #vis struct #iter_type #impl_generics (#base, usize) #where_clause;
+            #vis struct #iter_type #impl_generics (#base, usize, usize) #where_clause;
 
             impl #impl_generics ::core::iter::Iterator for #iter_type #ty_generics #where_clause {
                 type Item = (&'static ::bitfld::FieldMetadata<#base>, #base);
 
                 fn next(&mut self) -> Option<Self::Item> {
-                    if self.1 >= <#ty #ty_generics>::NUM_FIELDS {
+                    if self.1 >= self.2 {
                         return None;
                     }
                     let metadata = &<#ty #ty_generics>::FIELDS[self.1];
@@ -825,11 +825,24 @@ impl Bitfields {
                 }
             }
 
+            impl #impl_generics ::core::iter::DoubleEndedIterator for #iter_type #ty_generics #where_clause {
+                fn next_back(&mut self) -> Option<Self::Item> {
+                    if self.1 >= self.2 {
+                        return None;
+                    }
+                    self.2 -= 1;
+                    let metadata = &<#ty #ty_generics>::FIELDS[self.2];
+                    let shifted_mask = (1 << (metadata.high_bit - metadata.low_bit + 1)) - 1;
+                    let value = (self.0 >> metadata.low_bit) & shifted_mask;
+                    Some((metadata, value))
+                }
+            }
+
             impl #impl_generics #ty #ty_generics #where_clause {
                 /// Returns an iterator over (metadata, value) pairs for each
                 /// field.
                 pub fn iter(&self) -> #iter_type #ty_generics {
-                    #iter_type(self.0, 0)
+                    #iter_type(self.0, 0, Self::NUM_FIELDS)
                 }
             }
 
@@ -837,14 +850,14 @@ impl Bitfields {
                 type Item = (&'static ::bitfld::FieldMetadata<#base>, #base);
                 type IntoIter = #iter_type #ty_generics;
 
-                fn into_iter(self) -> Self::IntoIter { #iter_type(self.0, 0) }
+                fn into_iter(self) -> Self::IntoIter { #iter_type(self.0, 0, Self::NUM_FIELDS) }
             }
 
             impl #ref_impl_generics ::core::iter::IntoIterator for &'a #ty #ty_generics #where_clause {
                 type Item = (&'static ::bitfld::FieldMetadata<#base>, #base);
                 type IntoIter = #iter_type #ty_generics;
 
-                fn into_iter(self) -> Self::IntoIter { #iter_type(self.0, 0) }
+                fn into_iter(self) -> Self::IntoIter { #iter_type(self.0, 0, <#ty #ty_generics>::NUM_FIELDS) }
             }
         }
     }

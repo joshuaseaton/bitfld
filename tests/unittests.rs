@@ -271,25 +271,31 @@ mod tests {
 
         let actual: Vec<(&'static Metadata, u64)> =
             example.into_iter().collect();
+        let rev_actual: Vec<(&'static Metadata, u64)> =
+            example.into_iter().rev().collect();
 
         assert_eq!(actual.len(), EXPECTED.len());
+        assert_eq!(rev_actual.len(), EXPECTED.len());
         for i in 0..EXPECTED.len() {
             let (expected_val, expected_metadata) = &EXPECTED[i];
-            let (actual_metadata, actual_val) = &actual[i];
-            assert_eq!(actual_val, expected_val, "{i}");
-            assert_eq!(actual_metadata.name, expected_metadata.name, "{i}");
-            assert_eq!(
-                actual_metadata.high_bit, expected_metadata.high_bit,
-                "{i}"
-            );
-            assert_eq!(
-                actual_metadata.low_bit, expected_metadata.low_bit,
-                "{i}"
-            );
-            assert_eq!(
-                actual_metadata.default, expected_metadata.default,
-                "{i}"
-            );
+            for (label, (actual_metadata, actual_val)) in
+                [("fwd", &actual[i]), ("rev", &rev_actual[EXPECTED.len() - 1 - i])]
+            {
+                assert_eq!(actual_val, expected_val, "{label}:{i}");
+                assert_eq!(actual_metadata.name, expected_metadata.name, "{label}:{i}");
+                assert_eq!(
+                    actual_metadata.high_bit, expected_metadata.high_bit,
+                    "{label}:{i}"
+                );
+                assert_eq!(
+                    actual_metadata.low_bit, expected_metadata.low_bit,
+                    "{label}:{i}"
+                );
+                assert_eq!(
+                    actual_metadata.default, expected_metadata.default,
+                    "{label}:{i}"
+                );
+            }
         }
     }
 
