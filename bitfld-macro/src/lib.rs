@@ -308,19 +308,14 @@ impl Bitfield {
         let setter_name = format_ident!("set_{}", name);
 
         let base_type = &ty.base.def;
-        let ty = &ty.def.ident;
         let low_bit = Literal::usize_unsuffixed(self.low_bit);
         let bit_width = self.bit_width();
 
         if bit_width == 1 {
-            let get_doc = format!(
-                "Returns the value of the `{name}` bit (i.e., {ty}[{}]).",
-                self.low_bit,
-            );
-            let set_doc = format!(
-                "Sets the value of the `{name}` bit (i.e., {ty}[{}]).",
-                self.low_bit,
-            );
+            let get_doc =
+                format!("Returns the value of `{name}[{}]`.", self.low_bit,);
+            let set_doc =
+                format!("Sets the value of the `{name}[{}]`.", self.low_bit,);
             return quote! {
                 #cfg_attr
                 #[doc = #get_doc]
@@ -344,11 +339,11 @@ impl Bitfield {
         }
 
         let get_doc = format!(
-            "Returns the value of the `{name}` field (i.e., `{ty}[{}:{}]`).",
+            "Returns the value of `{name}[{}:{}]`).",
             self.high_bit, self.low_bit,
         );
         let set_doc = format!(
-            "Sets the value of the `{name}` field (i.e., `{ty}[{}:{}]`).",
+            "Sets the value of `{name}[{}:{}]`).",
             self.high_bit, self.low_bit,
         );
 
