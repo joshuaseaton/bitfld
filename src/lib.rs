@@ -359,6 +359,11 @@ use core::fmt;
 /// where `MinWidth<$high, $low>` is the smallest unsigned integral type of
 /// bit size at least `$high - $low + 1`.
 ///
+/// Each getter and setter is annotated with an auto-generated doc string
+/// referencing the corresponding bit range (i.e., `TypeName[hi:lo]` or
+/// `TypeName[bit]`). Doc comments on field declarations are also forwarded to
+/// the getter, and appear before the auto-generated line.
+///
 /// If an expression is given on the right-hand side of a field declaration,
 /// this indicates a _default_ value in the case of a named field or a
 /// _reserved-as_ value in the case of a reserved value. More on that
@@ -436,6 +441,9 @@ use core::fmt;
 /// checks at macro-evaluation time. Fields with differing pointer-width
 /// conditions may overlap; all other overlapping fields remain an error.
 /// High-bit bounds checks on the other hand are deferred to compile time.
+///
+/// If a field name appears in multiple cfg blocks and only the first has doc
+/// comments, they are automatically propagated to the others.
 ///
 /// Any cfg blocks must appear before any bare (unconditioned) field
 /// declarations, and at most one block per pointer-width value is permitted.

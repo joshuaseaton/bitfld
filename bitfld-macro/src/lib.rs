@@ -201,6 +201,7 @@ struct Bitfield {
     low_bit: usize,
     repr: Option<Type>,
     cfg_pointer_width: Option<String>,
+    doc_attrs: Vec<Attribute>,
 
     //
     default: Option<Box<Expr>>,
@@ -217,6 +218,7 @@ impl Bitfield {
         low_bit: usize,
         repr: Option<Type>,
         cfg_pointer_width: Option<String>,
+        doc_attrs: Vec<Attribute>,
         default: Option<Box<Expr>>,
     ) -> Self {
         let shifted_mask = {
@@ -253,6 +255,7 @@ impl Bitfield {
             low_bit,
             repr,
             cfg_pointer_width,
+            doc_attrs,
             default,
             shifted_mask,
         }
@@ -304,8 +307,10 @@ impl Bitfield {
         debug_assert!(!self.is_reserved());
 
         let cfg_attr = cfg_attr(self);
+        let doc_attrs = &self.doc_attrs;
         let name = self.name.as_ref().unwrap();
         let setter_name = format_ident!("set_{}", name);
+        let type_name = &ty.def.ident;
 
         let base_type = &ty.base.def;
         let low_bit = Literal::usize_unsuffixed(self.low_bit);
@@ -313,11 +318,12 @@ impl Bitfield {
 
         if bit_width == 1 {
             let get_doc =
-                format!("Returns the value of `{name}[{}]`.", self.low_bit,);
+                format!("The value of `{type_name}[{}]`.", self.low_bit,);
             let set_doc =
-                format!("Sets the value of the `{name}[{}]`.", self.low_bit,);
+                format!("Sets the value of `{type_name}[{}]`.", self.low_bit,);
             return quote! {
                 #cfg_attr
+                #(#doc_attrs)*
                 #[doc = #get_doc]
                 #[inline]
                 pub const fn #name(&self) -> bool {
@@ -339,11 +345,11 @@ impl Bitfield {
         }
 
         let get_doc = format!(
-            "Returns the value of `{name}[{}:{}]`).",
+            "The value of `{type_name}[{}:{}]`.",
             self.high_bit, self.low_bit,
         );
         let set_doc = format!(
-            "Sets the value of `{name}[{}:{}]`).",
+            "Sets the value of `{type_name}[{}:{}]`.",
             self.high_bit, self.low_bit,
         );
 
@@ -353,6 +359,7 @@ impl Bitfield {
             quote! { ((self.0 >> #low_bit) & #shifted_mask) as #min_width };
         let getter = if let Some(repr) = &self.repr {
             quote! {
+                #(#doc_attrs)*
                 #[doc = #get_doc]
                 #[inline]
                 pub fn #name(&self)
@@ -369,6 +376,7 @@ impl Bitfield {
             }
         } else {
             quote! {
+                #(#doc_attrs)*
                 #[doc = #get_doc]
                 #[inline]
                 pub const fn #name(&self) -> #min_width {
@@ -448,11 +456,16 @@ impl Parse for Bitfield {
             return Err(err(&stmt));
         };
 
-        if let Some(attr) = local.attrs.first() {
-            return Err(Error::new_spanned(
-                attr,
-                "attributes are not permitted on individual fields",
-            ));
+        let mut doc_attrs = Vec::new();
+        for attr in &local.attrs {
+            if attr.path().is_ident("doc") {
+                doc_attrs.push(attr.clone());
+            } else {
+                return Err(Error::new_spanned(
+                    attr,
+                    "attributes are not permitted on individual fields",
+                ));
+            }
         }
 
         let Pat::Type(ref pat_type) = local.pat else {
@@ -548,6 +561,13 @@ impl Parse for Bitfield {
             None
         };
 
+        if !doc_attrs.is_empty() && name.is_none() {
+            return Err(Error::new_spanned(
+                &doc_attrs[0],
+                "doc comments are not permitted on reserved fields",
+            ));
+        }
+
         if repr.is_some() {
             if name.is_none() {
                 return Err(Error::new_spanned(
@@ -570,6 +590,7 @@ impl Parse for Bitfield {
             low,
             repr,
             None,
+            doc_attrs,
             default_or_value,
         ))
     }
@@ -1048,6 +1069,30 @@ impl Parse for Bitfields {
         // Phase 2: bare fields.
         while !input.is_empty() {
             fields.push(input.parse::<Bitfield>()?);
+        }
+
+        // Propagate doc comments across cfg-gated field variants: if one
+        // variant has a doc comment and the other doesn't, clone it over.
+        for i in 0..fields.len() {
+            if fields[i].name.is_none()
+                || fields[i].cfg_pointer_width.is_none()
+                || fields[i].doc_attrs.is_empty()
+            {
+                continue;
+            }
+            for j in (i + 1)..fields.len() {
+                if fields[j].name == fields[i].name
+                    && fields[j].cfg_pointer_width.is_some()
+                    && fields[j].cfg_pointer_width
+                        != fields[i].cfg_pointer_width
+                    && fields[j].doc_attrs.is_empty()
+                {
+                    #[allow(clippy::assigning_clones)]
+                    {
+                        fields[j].doc_attrs = fields[i].doc_attrs.clone();
+                    }
+                }
+            }
         }
 
         fields.sort_by_key(|field| field.low_bit);
