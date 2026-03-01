@@ -202,6 +202,7 @@ struct Bitfield {
     repr: Option<Type>,
     cfg_pointer_width: Option<String>,
     doc_attrs: Vec<Attribute>,
+    unshifted: bool,
 
     //
     default: Option<Box<Expr>>,
@@ -219,6 +220,7 @@ impl Bitfield {
         repr: Option<Type>,
         cfg_pointer_width: Option<String>,
         doc_attrs: Vec<Attribute>,
+        unshifted: bool,
         default: Option<Box<Expr>>,
     ) -> Self {
         let shifted_mask = {
@@ -256,6 +258,7 @@ impl Bitfield {
             repr,
             cfg_pointer_width,
             doc_attrs,
+            unshifted,
             default,
             shifted_mask,
         }
@@ -315,6 +318,60 @@ impl Bitfield {
         let base_type = &ty.base.def;
         let low_bit = Literal::usize_unsuffixed(self.low_bit);
         let bit_width = self.bit_width();
+
+        if self.unshifted {
+            debug_assert!(self.repr.is_none());
+
+            let shifted_mask = &self.shifted_mask;
+            let mask = quote! { (#shifted_mask << #low_bit) };
+            let range = self.display_range();
+
+            let get_doc =
+                format!("The unshifted value of `{type_name}{range}`.",);
+            let set_doc =
+                format!("Sets the unshifted value of `{type_name}{range}`.",);
+
+            if bit_width == 1 {
+                let bit_mask = quote! { (1 << #low_bit) };
+                return quote! {
+                    #cfg_attr
+                    #(#doc_attrs)*
+                    #[doc = #get_doc]
+                    #[inline]
+                    pub const fn #name(&self) -> #base_type {
+                        self.0 & #bit_mask
+                    }
+
+                    #cfg_attr
+                    #[doc = #set_doc]
+                    #[inline]
+                    pub const fn #setter_name(&mut self, value: #base_type) -> &mut Self {
+                        debug_assert!((value & !#bit_mask) == 0);
+                        self.0 = (self.0 & !#bit_mask) | (value & #bit_mask);
+                        self
+                    }
+                };
+            }
+
+            return quote! {
+                #cfg_attr
+                #(#doc_attrs)*
+                #[doc = #get_doc]
+                #[inline]
+                pub const fn #name(&self) -> #base_type {
+                    self.0 & #mask
+                }
+
+                #cfg_attr
+                #[doc = #set_doc]
+                #[inline]
+                pub const fn #setter_name(&mut self, value: #base_type) -> &mut Self {
+                    debug_assert!((value & !#mask) == 0);
+                    self.0 = (self.0 & !#mask) | (value & #mask);
+                    self
+                }
+            };
+        }
 
         if bit_width == 1 {
             let get_doc =
@@ -457,9 +514,18 @@ impl Parse for Bitfield {
         };
 
         let mut doc_attrs = Vec::new();
+        let mut unshifted = false;
         for attr in &local.attrs {
             if attr.path().is_ident("doc") {
                 doc_attrs.push(attr.clone());
+            } else if attr.path().is_ident("unshifted") {
+                if unshifted {
+                    return Err(Error::new_spanned(
+                        attr,
+                        "duplicate `#[unshifted]` attribute",
+                    ));
+                }
+                unshifted = true;
             } else {
                 return Err(Error::new_spanned(
                     attr,
@@ -583,6 +649,19 @@ impl Parse for Bitfield {
             }
         }
 
+        if unshifted && name.is_none() {
+            return Err(Error::new_spanned(
+                &local.pat,
+                "`#[unshifted]` is not permitted on reserved fields",
+            ));
+        }
+        if unshifted && repr.is_some() {
+            return Err(Error::new_spanned(
+                repr,
+                "`#[unshifted]` is not permitted on fields with custom representations",
+            ));
+        }
+
         Ok(Bitfield::new(
             stmt.span(),
             name,
@@ -591,6 +670,7 @@ impl Parse for Bitfield {
             repr,
             None,
             doc_attrs,
+            unshifted,
             default_or_value,
         ))
     }
@@ -855,7 +935,8 @@ impl Bitfields {
             }
 
             impl #impl_generics #ty #ty_generics #where_clause {
-                /// Returns an iterator over (metadata, value) pairs for each
+                /// Returns an iterator over
+                /// ([metadata][`bitfld::FieldMetadata`], value) pairs for each
                 /// field.
                 pub fn iter(&self) -> #iter_type #ty_generics {
                     #iter_type(self.0, 0, Self::NUM_FIELDS)
@@ -1071,12 +1152,12 @@ impl Parse for Bitfields {
             fields.push(input.parse::<Bitfield>()?);
         }
 
-        // Propagate doc comments across cfg-gated field variants: if one
-        // variant has a doc comment and the other doesn't, clone it over.
+        // Propagate doc comments and `unshifted` across cfg-gated field
+        // variants: if one variant has them and the other doesn't, copy over.
         for i in 0..fields.len() {
             if fields[i].name.is_none()
                 || fields[i].cfg_pointer_width.is_none()
-                || fields[i].doc_attrs.is_empty()
+                || (fields[i].doc_attrs.is_empty() && !fields[i].unshifted)
             {
                 continue;
             }
@@ -1085,11 +1166,17 @@ impl Parse for Bitfields {
                     && fields[j].cfg_pointer_width.is_some()
                     && fields[j].cfg_pointer_width
                         != fields[i].cfg_pointer_width
-                    && fields[j].doc_attrs.is_empty()
                 {
-                    #[allow(clippy::assigning_clones)]
+                    if !fields[i].doc_attrs.is_empty()
+                        && fields[j].doc_attrs.is_empty()
                     {
-                        fields[j].doc_attrs = fields[i].doc_attrs.clone();
+                        #[allow(clippy::assigning_clones)]
+                        {
+                            fields[j].doc_attrs = fields[i].doc_attrs.clone();
+                        }
+                    }
+                    if fields[i].unshifted {
+                        fields[j].unshifted = true;
                     }
                 }
             }

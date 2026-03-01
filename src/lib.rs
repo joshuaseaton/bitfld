@@ -175,6 +175,10 @@ use core::fmt;
 ///     <em>NamedBitfield</em>:
 ///     <br>
 ///     &nbsp;&nbsp;
+///         <code>#[unshifted]</code>
+///         <sup>?</sup>
+///     <br>
+///     &nbsp;&nbsp;
 ///         <code>let</code>
 ///         <a href="https://doc.rust-lang.org/reference/identifiers.html">IDENTIFIER </a>
 ///         <code>:</code>
@@ -363,6 +367,13 @@ use core::fmt;
 /// referencing the corresponding bit range (i.e., `TypeName[hi:lo]` or
 /// `TypeName[bit]`). Doc comments on field declarations are also forwarded to
 /// the getter, and appear before the auto-generated line.
+///
+/// A named field may be annotated with `#[unshifted]`, which results in the
+/// getter and setter operating on values in their original bit position within
+/// the base type rather than shifting them down. For example, the setter and
+/// getter for a field at \[19:16\] would expect and return values like
+/// `0x50000`  instead of `0x5`. `#[unshifted]` is incompatible with reserved
+/// fields and fields with custom representations.
 ///
 /// If an expression is given on the right-hand side of a field declaration,
 /// this indicates a _default_ value in the case of a named field or a

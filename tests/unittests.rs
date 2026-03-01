@@ -6,7 +6,7 @@
 
 #[cfg(test)]
 mod tests {
-    use bitfld::{bitfield_repr, layout, FieldMetadata};
+    use bitfld::{FieldMetadata, bitfield_repr, layout};
 
     layout!({
         struct EmptyU8(u8);
@@ -278,11 +278,15 @@ mod tests {
         assert_eq!(rev_actual.len(), EXPECTED.len());
         for i in 0..EXPECTED.len() {
             let (expected_val, expected_metadata) = &EXPECTED[i];
-            for (label, (actual_metadata, actual_val)) in
-                [("fwd", &actual[i]), ("rev", &rev_actual[EXPECTED.len() - 1 - i])]
-            {
+            for (label, (actual_metadata, actual_val)) in [
+                ("fwd", &actual[i]),
+                ("rev", &rev_actual[EXPECTED.len() - 1 - i]),
+            ] {
                 assert_eq!(actual_val, expected_val, "{label}:{i}");
-                assert_eq!(actual_metadata.name, expected_metadata.name, "{label}:{i}");
+                assert_eq!(
+                    actual_metadata.name, expected_metadata.name,
+                    "{label}:{i}"
+                );
                 assert_eq!(
                     actual_metadata.high_bit, expected_metadata.high_bit,
                     "{label}:{i}"
@@ -300,6 +304,73 @@ mod tests {
     }
 
     layout!({
+        struct Unshifted(u32);
+        {
+            let field: Bits<19, 16>;
+            #[unshifted]
+            let unshifted_field: Bits<15, 12>;
+            let _: Bits<11, 9>;
+            #[unshifted]
+            let unshifted_bit: Bit<8>;
+            let normal_bit: Bit<7>;
+            let _: Bits<6, 0>;
+        }
+    });
+
+    #[test]
+    fn unshifted_multi_bit_getter() {
+        let val = Unshifted::from(0x5 << 12);
+        assert_eq!(val.unshifted_field(), 0x5000);
+    }
+
+    #[test]
+    fn unshifted_multi_bit_setter() {
+        let mut val = Unshifted::new();
+        val.set_unshifted_field(0xa000);
+        assert_eq!(val.unshifted_field(), 0xa000);
+        assert_eq!(*val & (0xf << 12), 0xa000);
+    }
+
+    #[test]
+    fn unshifted_single_bit_getter() {
+        let val = Unshifted::from(1 << 8);
+        assert_eq!(val.unshifted_bit(), 1 << 8);
+
+        let val = Unshifted::from(0);
+        assert_eq!(val.unshifted_bit(), 0);
+    }
+
+    #[test]
+    fn unshifted_single_bit_setter() {
+        let mut val = Unshifted::new();
+        val.set_unshifted_bit(1 << 8);
+        assert_eq!(val.unshifted_bit(), 1 << 8);
+
+        val.set_unshifted_bit(0);
+        assert_eq!(val.unshifted_bit(), 0);
+    }
+
+    #[test]
+    fn unshifted_round_trip() {
+        let val = *Unshifted::new()
+            .set_unshifted_field(0x7000)
+            .set_unshifted_bit(1 << 8)
+            .set_field(0xa)
+            .set_normal_bit(true);
+        assert_eq!(val.unshifted_field(), 0x7000);
+        assert_eq!(val.unshifted_bit(), 1 << 8);
+        assert_eq!(val.field(), 0xa);
+        assert!(val.normal_bit());
+    }
+
+    #[test]
+    fn unshifted_ignores_other_bits() {
+        let val = Unshifted::from(0xffff_ffff);
+        assert_eq!(val.unshifted_field(), 0xf000);
+        assert_eq!(val.unshifted_bit(), 1 << 8);
+    }
+
+    layout!({
         struct Generic<const N: u32>(u32);
         {
             let a: Bits<15, 8>;
@@ -310,9 +381,7 @@ mod tests {
 
     #[test]
     fn const_generics() {
-        let val = *Generic::<0>::new()
-            .set_a(0xfe)
-            .set_b(true);
+        let val = *Generic::<0>::new().set_a(0xfe).set_b(true);
         assert_eq!(val.a(), 0xfe);
         assert!(val.b());
         assert_eq!(*val, (0xabcd << 16) | (0xfe << 8) | 1);
