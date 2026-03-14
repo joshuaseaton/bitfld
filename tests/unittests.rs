@@ -114,7 +114,7 @@ mod tests {
         assert_eq!(Example::WITH_DEFAULT_MASK, 0x3);
         assert_eq!(Example::WITH_DEFAULT_SHIFT, 9usize);
 
-        assert_eq!(Example::BIT_BIT, 8usize);
+        assert_eq!(Example::BIT_SHIFT, 8usize);
 
         assert_eq!(Example::U8_REPR_MASK, 0xf);
         assert_eq!(Example::U8_REPR_SHIFT, 4usize);

@@ -27,7 +27,7 @@ layout!({
 
 #[cfg(target_pointer_width = "64")]
 const _: () = {
-    assert!(Mcause::INTERRUPT_BIT == 63);
+    assert!(Mcause::INTERRUPT_SHIFT == 63);
     assert!(Mcause::CODE_MASK == 0x7fff_ffff_ffff_ffff);
     assert!(Mcause::CODE_SHIFT == 0);
     assert!(Mcause::NUM_FIELDS == 2);
@@ -35,7 +35,7 @@ const _: () = {
 
 #[cfg(target_pointer_width = "32")]
 const _: () = {
-    assert!(Mcause::INTERRUPT_BIT == 31);
+    assert!(Mcause::INTERRUPT_SHIFT == 31);
     assert!(Mcause::CODE_MASK == 0x7fff_ffff);
     assert!(Mcause::CODE_SHIFT == 0);
     assert!(Mcause::NUM_FIELDS == 2);
@@ -71,9 +71,9 @@ layout!({
 });
 
 #[cfg(target_pointer_width = "64")]
-const _: () = assert!(Mstatus::SD_BIT == 63);
+const _: () = assert!(Mstatus::SD_SHIFT == 63);
 #[cfg(target_pointer_width = "32")]
-const _: () = assert!(Mstatus::SD_BIT == 31);
+const _: () = assert!(Mstatus::SD_SHIFT == 31);
 const _: () = assert!(Mstatus::MPP_MASK == 0x3);
 const _: () = assert!(Mstatus::MPP_SHIFT == 11);
 

@@ -723,31 +723,20 @@ impl Bitfields {
             let low_bit = Literal::usize_unsuffixed(field.low_bit);
             let shifted_mask = &field.shifted_mask;
 
-            if field.bit_width() == 1 {
-                let bit_name = format_ident!("{name_upper}_BIT");
-                let doc = format!("Bit position of the `{name_lower}` field.",);
-                field_constants.push(quote! {
-                    #cfg_attr
-                    #[doc = #doc]
-                    pub const #bit_name: usize = #low_bit;
-                });
-            } else {
-                let mask_name = format_ident!("{name_upper}_MASK");
-                let shift_name = format_ident!("{name_upper}_SHIFT");
-                let mask_doc =
-                    format!("Unshifted bitmask of the `{name_lower}` field.");
-                let shift_doc = format!(
-                    "Bit shift (i.e., the low bit) of the `{name_lower}` field."
-                );
-                field_constants.push(quote! {
-                    #cfg_attr
-                    #[doc = #mask_doc]
-                    pub const #mask_name: #base = #shifted_mask;
-                    #cfg_attr
-                    #[doc = #shift_doc]
-                    pub const #shift_name: usize = #low_bit;
-                });
-            }
+            let mask_name = format_ident!("{name_upper}_MASK");
+            let mask_doc = format!("Unshifted bitmask of `{name_lower}`.");
+            let shift_name = format_ident!("{name_upper}_SHIFT");
+            let shift_doc =
+                format!("Bit shift (i.e., the low bit) of `{name_lower}`.");
+
+            field_constants.push(quote! {
+                #cfg_attr
+                #[doc = #mask_doc]
+                pub const #mask_name: #base = #shifted_mask;
+                #cfg_attr
+                #[doc = #shift_doc]
+                pub const #shift_name: usize = #low_bit;
+            });
 
             if let Some(default) = &field.default {
                 let default_name = format_ident!("{name_upper}_DEFAULT");
