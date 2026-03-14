@@ -732,7 +732,7 @@ impl Bitfields {
             field_constants.push(quote! {
                 #cfg_attr
                 #[doc = #mask_doc]
-                pub const #mask_name: #base = #shifted_mask;
+                pub const #mask_name: #base = (#shifted_mask << #low_bit);
                 #cfg_attr
                 #[doc = #shift_doc]
                 pub const #shift_name: usize = #low_bit;

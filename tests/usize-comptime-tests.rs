@@ -74,7 +74,7 @@ layout!({
 const _: () = assert!(Mstatus::SD_SHIFT == 63);
 #[cfg(target_pointer_width = "32")]
 const _: () = assert!(Mstatus::SD_SHIFT == 31);
-const _: () = assert!(Mstatus::MPP_MASK == 0x3);
+const _: () = assert!(Mstatus::MPP_MASK == 0x1800);
 const _: () = assert!(Mstatus::MPP_SHIFT == 11);
 
 #[test]

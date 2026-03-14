@@ -100,23 +100,23 @@ mod tests {
                 | (0b11 << 9)
         );
 
-        assert_eq!(Example::U32_REPR_MASK, 0x3ffff);
+        assert_eq!(Example::U32_REPR_MASK, 0x1ffff8000000);
         assert_eq!(Example::U32_REPR_SHIFT, 27usize,);
 
-        assert_eq!(Example::CUSTOM_MASK, 0xf);
+        assert_eq!(Example::CUSTOM_MASK, 0x7800000);
         assert_eq!(Example::CUSTOM_SHIFT, 23usize);
 
-        assert_eq!(Example::CUSTOM_WITH_DEFAULT_MASK, 0xf);
+        assert_eq!(Example::CUSTOM_WITH_DEFAULT_MASK, 0x780000);
         assert_eq!(Example::CUSTOM_WITH_DEFAULT_SHIFT, 19usize);
 
         assert_eq!(Example::RSVD_18_11, 0xef << 11);
 
-        assert_eq!(Example::WITH_DEFAULT_MASK, 0x3);
+        assert_eq!(Example::WITH_DEFAULT_MASK, 0x600);
         assert_eq!(Example::WITH_DEFAULT_SHIFT, 9usize);
 
         assert_eq!(Example::BIT_SHIFT, 8usize);
 
-        assert_eq!(Example::U8_REPR_MASK, 0xf);
+        assert_eq!(Example::U8_REPR_MASK, 0xf0);
         assert_eq!(Example::U8_REPR_SHIFT, 4usize);
 
         assert_eq!(Example::RSVD_3_2, 1 << 2);
